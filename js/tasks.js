@@ -122,6 +122,14 @@
     const lead = members[0];
     if (!briefed) await brief(lead, superiorId, task);
     task.status = 'in_progress'; changed();
+    // Departemen Gudang: tarik data Gudang-Document dulu (hanya baca)
+    let gudangData = null;
+    if (dept.integration === 'gudang') {
+      sim.say(lead.id, 'Menarik data Gudang-Document...', 3, 'server');
+      gudangData = await VO.gudang.forTask(task);
+      if (gudangData.error) { sim.say(lead.id, 'Data gudang gagal diambil', 3, 'alert'); VO.log(S(), `Gagal membaca Gudang-Document: ${gudangData.error}`, 'alert'); }
+      else VO.log(S(), `${dept.name} menarik data Gudang-Document (${gudangData.ringkasan.jenisBarang} barang, ${gudangData.ringkasan.grn} GRN)`, 'server');
+    }
     if (members.length > 1) sim.say(lead.id, 'Ayo tim, kita bagi tugas!', 3, 'users');
     const roster = members.map((m) => `- ${m.name} (${m.role})`).join('\n');
     const outs = await Promise.all(
@@ -130,9 +138,14 @@
           .then((o) => `**${m.name} (${m.role})**: ${o}`)
       )
     );
-    const out = members.length > 1
-      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai (jangan hanya meringkas).`)
+    const gudangNote = gudangData && !gudangData.error
+      ? ` Laporan ini berbasis data Gudang-Document: cantumkan sumber & waktu pengambilan data di awal, pakai angka dan nomor dokumen (PO/GRN/BK), periksa angka tim terhadap data berikut, dan jangan mengarang angka.\n\n=== DATA GUDANG-DOCUMENT ===\n${VO.gudang.toMarkdown(gudangData)}\n=== AKHIR DATA ===`
+      : '';
+    let out = members.length > 1
+      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai (jangan hanya meringkas).${gudangNote}`)
       : outs[0];
+    // tanpa AI: laporan gudang dihitung langsung dari data
+    if (gudangData && !task.ai) out = VO.gudang.simReport(gudangData, task.title);
     await reportTo(lead, superiorId);
     return out;
   }
@@ -192,8 +205,10 @@
         sub.status = 'working'; changed();
         const q = VO.ai.withDocs(S(), prompt, task.title + ' ' + ent.role, task.id);
         if (q.docs.length) { sub.refs = q.docs.map((d) => d.title); sim.say(ent.id, 'Membaca ' + q.docs.length + ' dokumen', 2.5, 'book'); }
-        VO.ai.run(
-          { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: q.prompt },
+        const isGudang = !!VO.gudang.deptOf(S(), ent);
+        if (isGudang) sub.refs = [...(sub.refs || []), 'Data Gudang-Document'];
+        (isGudang ? VO.gudang.augment(task, q.prompt) : Promise.resolve(q.prompt)).then((finalPrompt) => VO.ai.run(
+          { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: finalPrompt },
           (_, full) => {
             sub.output = full;
             job.progress = Math.min(0.95, 0.08 + full.length / 1800);
@@ -207,7 +222,7 @@
             finish('done');
           },
           (e) => { sub.output = 'Gagal: ' + e.message; finish('failed'); }
-        );
+        ));
       };
       job.tick = (dt) => { if (job.progress < 0.08) job.progress += dt * 0.01; };
     } else {

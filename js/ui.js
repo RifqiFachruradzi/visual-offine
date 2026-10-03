@@ -83,23 +83,35 @@
   ui.addDept = async function (divisionId) {
     const s = S();
     const v = await ui.form('Tambah Departemen', [
-      { key: 'name', label: 'Nama departemen', value: '', placeholder: 'mis. Customer Support', required: true },
+      { key: 'template', label: 'Template', type: 'select', value: 'blank', options: [
+        { value: 'blank', label: 'Kosong (atur sendiri)' },
+        { value: 'gudang', label: 'Gudang — terhubung ke Gudang-Document (4 karyawan siap pakai)' },
+      ] },
+      { key: 'name', label: 'Nama departemen (kosongkan untuk nama template)', value: '', placeholder: 'mis. Customer Support / Gudang' },
       { key: 'divisionId', label: 'Divisi', type: 'select', value: divisionId, options: s.divisions.map((d) => ({ value: d.id, label: d.name })) },
-      { key: 'lead', label: 'Jabatan ketua tim', value: 'Team Lead' },
-      { key: 'count', label: 'Jumlah anggota awal (selain ketua)', value: '2' },
+      { key: 'lead', label: 'Jabatan ketua tim (template Kosong)', value: 'Team Lead' },
+      { key: 'count', label: 'Jumlah anggota awal selain ketua (template Kosong)', value: '2' },
     ]);
-    if (!v || !v.name) return;
+    if (!v) return;
+    const isGudang = v.template === 'gudang';
+    if (!v.name && !isGudang) return ui.toast('Nama departemen wajib diisi', 'alert');
     const div = s.divisions.find((d) => d.id === v.divisionId);
-    const dept = VO.addDepartment(s, v.divisionId, { name: v.name });
+    const dept = VO.addDepartment(s, v.divisionId, { name: v.name || (isGudang ? VO.gudang.TEMPLATE.name : ''), integration: isGudang ? 'gudang' : undefined });
     // taruh di kanan departemen terakhir dalam zona
     const sibs = s.departments.filter((d) => d.divisionId === v.divisionId && d !== dept);
     const rx = sibs.length ? Math.max(...sibs.map((d) => d.room.x + d.room.w)) + 1 : div.zone.x + 1;
     dept.room = { x: rx, y: div.zone.y + 4, w: 9, h: 6 };
-    VO.addAgent(s, dept.id, { role: v.lead || 'Team Lead', isLead: true });
-    const n = VO.clamp(parseInt(v.count, 10) || 0, 0, 20);
-    for (let i = 0; i < n; i++) VO.addAgent(s, dept.id, { role: 'Staff' });
+    let n;
+    if (isGudang) {
+      for (const r of VO.gudang.TEMPLATE.roles) VO.addAgent(s, dept.id, { ...r });
+      n = VO.gudang.TEMPLATE.roles.length - 1;
+    } else {
+      VO.addAgent(s, dept.id, { role: v.lead || 'Team Lead', isLead: true });
+      n = VO.clamp(parseInt(v.count, 10) || 0, 0, 20);
+      for (let i = 0; i < n; i++) VO.addAgent(s, dept.id, { role: 'Staff' });
+    }
     app().fitZone(div);
-    VO.log(s, `Departemen baru: ${dept.name} (${n + 1} agen)`, 'building');
+    VO.log(s, `Departemen baru: ${dept.name} (${n + 1} agen)${isGudang ? ' — terhubung ke Gudang-Document' : ''}`, isGudang ? 'server' : 'building');
     app().layoutChanged();
     app().select({ kind: 'dept', id: dept.id });
   };
@@ -273,7 +285,7 @@
       if (dir) h += `<div class="node director ${isSel('agent', dir.id)}" data-kind="agent" data-id="${dir.id}">${ni('briefcase', 'director')}<span class="name">${esc(dir.name)} <span class="sub">· ${esc(dir.role)}</span></span>${busy(dir.id)}${acts([['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
       for (const d of depts) {
         const ag = VO.deptAgents(s, d.id);
-        h += `<div class="node dept ${isSel('dept', d.id)}" data-kind="dept" data-id="${d.id}">${ni('building')}<span class="name">${esc(d.name)}</span><span class="badge">${ag.length}</span>${acts([['addAgent', 'Rekrut agen', 'plus'], ['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
+        h += `<div class="node dept ${isSel('dept', d.id)}" data-kind="dept" data-id="${d.id}">${ni(d.integration === 'gudang' ? 'server' : 'building')}<span class="name">${esc(d.name)}</span><span class="badge">${ag.length}</span>${acts([['addAgent', 'Rekrut agen', 'plus'], ['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
         for (const a of ag)
           h += `<div class="node agent ${isSel('agent', a.id)}" data-kind="agent" data-id="${a.id}">${a.live ? ni('live', 'live') : a.isLead ? ni('star', 'lead') : ni('bot')}<span class="name">${esc(a.name)} <span class="sub">· ${esc(a.role)}</span></span>${busy(a.id)}${acts([['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
         // tombol yang selalu terlihat (tidak hanya saat hover)
@@ -351,8 +363,9 @@
       const ag = VO.deptAgents(s, d.id);
       const div = s.divisions.find((x) => x.id === d.divisionId);
       h = `<div class="insp-head"><div class="avatar" style="background:${esc(div?.color || '#555')}">${VO.icon('building')}</div><div><div class="insp-name">${esc(d.name)}</div><div class="insp-role">Departemen · ${esc(div?.name || '-')}</div></div></div>
-        <div class="kv"><span>Ketua</span><span>${esc(ag[0]?.name || '-')}</span><span>Anggota</span><span>${ag.length} agen</span><span>Kapasitas</span><span>${VO.deskSlots(d.room).length} meja</span></div>
-        <div class="btns"><button class="small" data-i="addAgent">${VO.icon('plus')} Rekrut agen</button><button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button><button class="small" data-i="edit">${VO.icon('edit')} Edit</button><button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button></div>`;
+        <div class="kv"><span>Ketua</span><span>${esc(ag[0]?.name || '-')}</span><span>Anggota</span><span>${ag.length} agen</span><span>Kapasitas</span><span>${VO.deskSlots(d.room).length} meja</span>
+          ${d.integration === 'gudang' ? `<span>Integrasi</span><span class="integ">${VO.icon('server')} Gudang-Document (hanya baca)<br/><small id="gudangTest">${esc(ui._gudangTest || 'Klik "Tes koneksi" untuk memeriksa')}</small></span>` : ''}</div>
+        <div class="btns">${d.integration === 'gudang' ? `<button class="small" data-i="gudangTest">${VO.icon('activity')} Tes koneksi</button>` : ''}<button class="small" data-i="addAgent">${VO.icon('plus')} Rekrut agen</button><button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button><button class="small" data-i="edit">${VO.icon('edit')} Edit</button><button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button></div>`;
     } else if (sel.kind === 'division') {
       const d = s.divisions.find((x) => x.id === sel.id);
       if (!d) return VO.app.select(null);
@@ -381,6 +394,10 @@
       if (i === 'lead') ui.makeLead(sel.id);
       if (i === 'forget') { const a = VO.findEntity(S(), sel.id); a.memory = []; VO.app.changed(); ui.toast('Ingatan ' + a.name + ' dihapus', 'eraser'); }
       if (i === 'addAgent') ui.addAgent(sel.id);
+      if (i === 'gudangTest') {
+        ui._gudangTest = 'Menghubungi Gudang-Document...';
+        VO.gudang.test().then((t) => { ui._gudangTest = 'Terhubung: ' + t; }, (e) => { ui._gudangTest = 'Gagal: ' + e.message; });
+      }
       if (i === 'addDept') ui.addDept(sel.id);
       if (i === 'assign') ui.assign(sel.kind, sel.id);
     });

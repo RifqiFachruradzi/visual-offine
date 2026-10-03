@@ -192,6 +192,7 @@
   VO.addDepartment = function (s, divisionId, o = {}) {
     const div = s.divisions.find((d) => d.id === divisionId);
     const dept = { id: VO.uid('dp'), divisionId, name: o.name || 'Departemen Baru', room: { x: (div?.zone.x ?? 2) + 1, y: (div?.zone.y ?? 12) + 4, w: 9, h: 6 } };
+    if (o.integration) dept.integration = o.integration; // 'gudang' = terhubung ke Gudang-Document
     s.departments.push(dept);
     return dept;
   };

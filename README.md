@@ -8,6 +8,7 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | Fitur | Keterangan |
 |---|---|
 | **Daftar & masuk** | Halaman login dengan tab **Masuk / Daftar** (email + kata sandi), seperti SimpananMu & Gudang-Document. Akun disimpan di **Upstash Redis** (hash scrypt, maks. 10 percobaan / 15 menit). Semua halaman & API dikunci di sisi server (cookie bertanda tangan + Vercel Middleware). Opsional: `REGISTER_CODE` (kode undangan) atau `ALLOW_REGISTER=false`. |
+| **Departemen Gudang ↔ Gudang-Document** | Template departemen **Gudang** (Kepala Gudang, Analis Stok, Admin PO & Penerimaan, Petugas Barang Keluar & Opname). Saat diberi tugas, tim menarik data aplikasi Gudang-Document (stok, PO, GRN, barang keluar, opname, supplier) — **hanya baca** — lalu Gemini mengolahnya menjadi laporan. Tanpa AI, laporan stok kritis & PO tertunda dihitung otomatis dari data. |
 | **Kamu = Boss** | Nama saat mendaftar otomatis menjadi Boss. Kantor, ingatan agen, dan Gudang Dokumen tersimpan **per akun di database**, jadi bisa dibuka dari perangkat mana pun. |
 | **Mulai dari kosong** | Kantor baru hanya berisi Ruang Boss, Ruang Rapat, dan Pantry — cocok untuk demo menambah divisi & karyawan. Tombol **Contoh** memuat kantor contoh, **Kosongkan** mulai dari nol lagi. |
 | **Hierarki kantor** | Kamu (Boss) → Direktur Divisi → Ketua Tim (lead) → Anggota. Setiap level briefing ke atasan, bekerja di mejanya, lalu melapor balik. |
@@ -107,11 +108,13 @@ js/render.js        renderer isometrik 2.5D: lantai, dinding, meja, furnitur, ka
 js/ui.js            panel organisasi, inspector, daftar tugas, dialog
 js/main.js          bootstrap, game loop, kamera & editor
 lib/llm.js          lapisan LLM bersama (Gemini / Claude), dipakai lokal & Vercel
-api/                Vercel Functions: health, run, login, register, logout, me, office
+api/                Vercel Functions: health, run, login, register, logout, me, office, gudang
 middleware.js       Vercel Routing Middleware: wajib login untuk semua halaman
 lib/auth.js         sesi login (HMAC, Web Crypto) dipakai middleware, functions & server lokal
 lib/accounts.js     daftar/masuk email + kata sandi (scrypt) di Upstash Redis
 lib/db.js           klien Upstash Redis REST (tanpa SDK)
+lib/gudang.js       baca data Gudang-Document (hanya baca) untuk departemen Gudang
+js/gudang.js        template departemen Gudang + data sebagai konteks tugas agen
 js/cloud.js         sinkron kantor & dokumen ke database per akun
 js/pdf.js           ekspor dokumen/laporan ke PDF (jsPDF di js/vendor, dimuat saat dibutuhkan)
 login.html          halaman login
@@ -130,3 +133,16 @@ hooks/              hook Claude Code → Visual Office
 | `GET /api/events` | Langganan event live (SSE) |
 
 `/api/event` & `/api/events` hanya ada di server lokal. Server lokal mendengarkan `127.0.0.1` secara default (ubah dengan `HOST=0.0.0.0` bila perlu — hati-hati, `/api/run` memakai API key-mu).
+
+## Integrasi Gudang-Document
+
+Departemen dengan template **Gudang** membaca data aplikasi [Gudang-Document](https://github.com/RifqiFachruradzi/Gudang-Document)
+langsung dari database Upstash yang sama (kunci `gudang:*`), **hanya baca** — tidak ada data gudang yang diubah.
+
+1. Pastikan project Visual Office terhubung ke database Upstash yang sama dengan Gudang-Document (Vercel → Storage, prefix `KV`).
+2. Tambah departemen → Template **Gudang — terhubung ke Gudang-Document**.
+3. Klik departemen Gudang → **Tes koneksi** untuk melihat jumlah barang, PO, dan GRN yang terbaca.
+4. Beri tugas ke departemen Gudang, misalnya "Buat laporan stok kritis dan PO yang belum selesai".
+
+Data yang diambil: stok (jumlah terbaru, minimum, lokasi), purchase order beserta sisa barang, penerimaan barang (GRN),
+barang keluar, stok opname, dan supplier. Tanda tangan, foto, dan akun pengguna Gudang-Document tidak diambil.
