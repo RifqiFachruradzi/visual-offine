@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { status, handleRun } from '../lib/llm.js';
 import { gate, authConfig } from '../lib/auth.js';
-import { handleLogin, handleLogout, handleMe, handleRegister, handleOffice, handleGudang } from '../lib/session-http.js';
+import { handleLogin, handleLogout, handleMe, handleRegister, handleOffice, handleGudang, handleMinimarket } from '../lib/session-http.js';
 
 // folder root proyek (file ini ada di local/)
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,6 +77,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/register') return handleRegister(req, res);
     if (url.pathname === '/api/office') return handleOffice(req, res);
     if (url.pathname === '/api/gudang') return handleGudang(req, res);
+    if (url.pathname === '/api/minimarket') return handleMinimarket(req, res);
     if (url.pathname === '/api/health') {
       return json(res, 200, { ok: true, ...status(), live: true, host: 'local', listeners: listeners.size });
     }

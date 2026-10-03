@@ -181,9 +181,10 @@
   VO.addDivision = function (s, o = {}) {
     const color = o.color || VO.PALETTE[s.divisions.length % VO.PALETTE.length];
     const div = { id: VO.uid('dv'), name: o.name || 'Divisi Baru', color, zone: { x: 2, y: 12, w: 12, h: 8 }, directorDesk: { x: 4, y: 13 } };
+    if (o.integration) div.integration = o.integration; // berlaku untuk semua departemen & direktur divisi
     s.divisions.push(div);
     if (o.directorRole !== null) {
-      const dir = VO.makeAgent({ divisionId: div.id, isDirector: true, role: o.directorRole || 'Direktur ' + div.name, shirt: '#2d3142' });
+      const dir = VO.makeAgent({ divisionId: div.id, isDirector: true, role: o.directorRole || 'Direktur ' + div.name, shirt: '#2d3142', prompt: o.directorPrompt });
       s.agents.push(dir);
     }
     return div;
@@ -192,7 +193,7 @@
   VO.addDepartment = function (s, divisionId, o = {}) {
     const div = s.divisions.find((d) => d.id === divisionId);
     const dept = { id: VO.uid('dp'), divisionId, name: o.name || 'Departemen Baru', room: { x: (div?.zone.x ?? 2) + 1, y: (div?.zone.y ?? 12) + 4, w: 9, h: 6 } };
-    if (o.integration) dept.integration = o.integration; // 'gudang' = terhubung ke Gudang-Document
+    if (o.integration) dept.integration = o.integration; // mis. 'gudang' = terhubung ke Gudang-Document
     s.departments.push(dept);
     return dept;
   };

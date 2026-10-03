@@ -41,9 +41,9 @@
       : `<div class="empty">Mulai obrolan dengan ${VO.esc(a.name)}. Tanyakan progres, minta ide, atau beri instruksi singkat.</div>`;
     $('chatBody').scrollTop = $('chatBody').scrollHeight;
     const ai = S().settings.aiMode && VO.ai.available;
-    const gudang = VO.gudang.deptOf(S(), a);
+    const integ = VO.integ.forEnt(S(), a);
     $('chatNote').textContent = ai
-      ? `Dijawab oleh ${VO.ai.label()}${gudang ? ' · membaca data Gudang-Document' : ''}`
+      ? `Dijawab oleh ${VO.ai.label()}${integ ? ' · membaca data ' + integ.label : ''}`
       : 'Mode simulasi — aktifkan AI di bar atas untuk jawaban sungguhan.';
   };
 
@@ -75,9 +75,10 @@
         const history = a.chat.slice(-12, -2).map((m) => `${m.from === 'boss' ? 'Boss' : a.name}: ${m.text}`).join('\n');
         let prompt = `${history ? 'Riwayat obrolan sebelumnya:\n' + history + '\n\n' : ''}Boss: ${text}\n\nBalas sebagai ${a.name} (${a.role}) dengan bahasa Indonesia yang santai tapi profesional, singkat dan jelas (maksimal ~150 kata kecuali diminta lebih panjang).`;
         prompt = VO.ai.withDocs(S(), prompt, text, null).prompt;
-        if (VO.gudang.deptOf(S(), a)) {
-          // satu kali tarik data per menit untuk chat gudang
-          prompt = await VO.gudang.augment({ id: 'chat-' + a.id + '-' + Math.floor(Date.now() / 60000) }, prompt);
+        const integ = VO.integ.forEnt(S(), a);
+        if (integ) {
+          // satu kali tarik data per menit untuk chat agen terintegrasi
+          prompt = await integ.augment({ id: 'chat-' + a.id + '-' + Math.floor(Date.now() / 60000) }, prompt);
         }
         await VO.ai.run(
           { model: a.model, system: VO.ai.systemPrompt(S(), a), prompt },

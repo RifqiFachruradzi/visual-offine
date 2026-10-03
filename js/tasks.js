@@ -110,9 +110,25 @@
     task.status = 'in_progress'; changed();
     sim.say(dir.id, 'Tim ' + div.name + ', ada tugas!', 3, 'megaphone');
     const reps = await Promise.all(depts.map((d) => runDept(task, d, dir.id, false).then((r) => `### ${d.name}\n${r}`)));
-    const out = await summarize(task, dir, reps, `Kamu direktur divisi ${div.name}. Gabungkan hasil semua departemen menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai untuk Boss (jangan hanya meringkas).`);
+    const integ = VO.integ.forDivision(s, div);
+    const data = integ ? await integ.forTask(task) : null; // memakai cache tugas yang sama
+    let out = await summarize(task, dir, reps, `Kamu direktur divisi ${div.name}. Gabungkan hasil semua departemen menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai untuk Boss (jangan hanya meringkas).${dataNote(integ, data)}`);
+    if (data && !task.ai) out = integ.simReport(data, task.title);
     await reportTo(dir, superiorId);
     return out;
+  }
+
+  async function pullData(task, integ, ent, where) {
+    sim.say(ent.id, `Menarik data ${integ.label}...`, 3, integ.icon);
+    const d = await integ.forTask(task);
+    if (d.error) { sim.say(ent.id, `Data ${integ.label} gagal diambil`, 3, 'alert'); VO.log(S(), `Gagal membaca ${integ.label}: ${d.error}`, 'alert'); }
+    else VO.log(S(), `${where} menarik data ${integ.label} (${integ.logText(d)})`, integ.icon);
+    return d;
+  }
+
+  function dataNote(integ, d) {
+    if (!integ || !d || d.error) return '';
+    return ` Laporan ini berbasis data ${integ.label}: cantumkan sumber & waktu pengambilan data di awal, ${integ.leadNote}, periksa angka tim terhadap data berikut, dan jangan mengarang angka.\n\n=== DATA ${integ.label.toUpperCase()} ===\n${integ.toMarkdown(d)}\n=== AKHIR DATA ===`;
   }
 
   async function runDept(task, dept, superiorId, briefed) {
@@ -122,14 +138,9 @@
     const lead = members[0];
     if (!briefed) await brief(lead, superiorId, task);
     task.status = 'in_progress'; changed();
-    // Departemen Gudang: tarik data Gudang-Document dulu (hanya baca)
-    let gudangData = null;
-    if (dept.integration === 'gudang') {
-      sim.say(lead.id, 'Menarik data Gudang-Document...', 3, 'server');
-      gudangData = await VO.gudang.forTask(task);
-      if (gudangData.error) { sim.say(lead.id, 'Data gudang gagal diambil', 3, 'alert'); VO.log(S(), `Gagal membaca Gudang-Document: ${gudangData.error}`, 'alert'); }
-      else VO.log(S(), `${dept.name} menarik data Gudang-Document (${gudangData.ringkasan.jenisBarang} barang, ${gudangData.ringkasan.grn} GRN)`, 'server');
-    }
+    // Departemen/divisi terintegrasi (Gudang-Document, MiniMarket, …): tarik data dulu (hanya baca)
+    const integ = VO.integ.forDept(s, dept);
+    const data = integ ? await pullData(task, integ, lead, dept.name) : null;
     if (members.length > 1) sim.say(lead.id, 'Ayo tim, kita bagi tugas!', 3, 'users');
     const roster = members.map((m) => `- ${m.name} (${m.role})`).join('\n');
     const outs = await Promise.all(
@@ -138,14 +149,12 @@
           .then((o) => `**${m.name} (${m.role})**: ${o}`)
       )
     );
-    const gudangNote = gudangData && !gudangData.error
-      ? ` Laporan ini berbasis data Gudang-Document: cantumkan sumber & waktu pengambilan data di awal, pakai angka dan nomor dokumen (PO/GRN/BK), periksa angka tim terhadap data berikut, dan jangan mengarang angka.\n\n=== DATA GUDANG-DOCUMENT ===\n${VO.gudang.toMarkdown(gudangData)}\n=== AKHIR DATA ===`
-      : '';
+    const note = dataNote(integ, data);
     let out = members.length > 1
-      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai (jangan hanya meringkas).${gudangNote}`)
+      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai (jangan hanya meringkas).${note}`)
       : outs[0];
-    // tanpa AI: laporan gudang dihitung langsung dari data
-    if (gudangData && !task.ai) out = VO.gudang.simReport(gudangData, task.title);
+    // tanpa AI: laporan dihitung langsung dari data integrasi
+    if (data && !task.ai) out = integ.simReport(data, task.title);
     await reportTo(lead, superiorId);
     return out;
   }
@@ -205,9 +214,9 @@
         sub.status = 'working'; changed();
         const q = VO.ai.withDocs(S(), prompt, task.title + ' ' + ent.role, task.id);
         if (q.docs.length) { sub.refs = q.docs.map((d) => d.title); sim.say(ent.id, 'Membaca ' + q.docs.length + ' dokumen', 2.5, 'book'); }
-        const isGudang = !!VO.gudang.deptOf(S(), ent);
-        if (isGudang) sub.refs = [...(sub.refs || []), 'Data Gudang-Document'];
-        (isGudang ? VO.gudang.augment(task, q.prompt) : Promise.resolve(q.prompt)).then((finalPrompt) => VO.ai.run(
+        const integ = VO.integ.forEnt(S(), ent);
+        if (integ) sub.refs = [...(sub.refs || []), 'Data ' + integ.label];
+        (integ ? integ.augment(task, q.prompt) : Promise.resolve(q.prompt)).then((finalPrompt) => VO.ai.run(
           { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: finalPrompt },
           (_, full) => {
             sub.output = full;

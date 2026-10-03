@@ -1,5 +1,6 @@
 /* =========================================================================
- * gudang.js — integrasi departemen Gudang dengan aplikasi Gudang-Document.
+ * gudang.js — integrasi departemen Gudang dengan aplikasi Gudang-Document
+ *   (didaftarkan lewat integrations.js).
  *   - Template departemen Gudang (Kepala Gudang, Analis Stok, dst.)
  *   - Menarik data Gudang-Document (HANYA BACA) lewat /api/gudang saat
  *     departemen Gudang mengerjakan tugas, lalu menyisipkannya ke prompt agen.
@@ -17,32 +18,6 @@
       { role: 'Admin PO & Penerimaan', style: 'shirt', prompt: 'Fokus pada purchase order dan penerimaan barang (GRN): PO terbuka/sebagian beserta sisa barang, GRN ditahan dan penyebabnya, selisih surat jalan vs fisik, barang rusak, dan kinerja supplier.' },
       { role: 'Petugas Barang Keluar & Opname', style: 'cardigan', prompt: 'Fokus pada barang keluar (tujuan, jumlah, barang paling sering keluar) dan stok opname/penyesuaian (selisih, jenis penyesuaian, yang masih menunggu persetujuan).' },
     ],
-  };
-
-  // Departemen yang terhubung ke Gudang-Document
-  gd.deptOf = (s, ent) => {
-    const d = s.departments.find((x) => x.id === ent.deptId);
-    return d && d.integration === 'gudang' ? d : null;
-  };
-
-  gd.fetch = async function () {
-    if (location.protocol === 'file:') throw new Error('Butuh server (npm start / Vercel) untuk membaca Gudang-Document');
-    const r = await fetch('/api/gudang', { cache: 'no-store' });
-    if (r.status === 401) { location.href = '/login.html'; throw new Error('Sesi habis'); }
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
-    return j;
-  };
-
-  // Satu kali tarik data per tugas (dipakai bersama oleh semua anggota tim)
-  const cache = new Map();
-  gd.forTask = function (task) {
-    if (!cache.has(task.id)) {
-      const p = gd.fetch().catch((e) => ({ error: e.message }));
-      cache.set(task.id, p);
-      setTimeout(() => cache.delete(task.id), 10 * 60 * 1000);
-    }
-    return cache.get(task.id);
   };
 
   const fmtTime = (iso) => { try { return new Date(iso).toLocaleString('id-ID'); } catch { return iso; } };
@@ -87,13 +62,6 @@
     return L.join('\n').slice(0, 24000);
   };
 
-  /** Tambahkan data gudang ke prompt agen departemen Gudang. */
-  gd.augment = async function (task, prompt) {
-    const d = await gd.forTask(task);
-    if (d.error) return `${prompt}\n\nCATATAN: data Gudang-Document gagal diambil (${d.error}). Sampaikan hal ini di laporanmu dan jangan mengarang angka.`;
-    return `${prompt}\n\n=== DATA GUDANG-DOCUMENT (real-time, hanya baca) ===\n${gd.toMarkdown(d)}\n=== AKHIR DATA ===\n\nAturan: gunakan HANYA data di atas sebagai fakta. Sebutkan nomor dokumen (PO/GRN/BK) dan angka yang relevan. Jika data yang dibutuhkan tidak ada, katakan tidak tersedia — jangan mengarang.`;
-  };
-
   /** Laporan tanpa AI (mode simulasi): dihitung langsung dari data. */
   gd.simReport = function (d, title) {
     if (d.error) return `> Data Gudang-Document gagal diambil: ${d.error}`;
@@ -116,10 +84,17 @@
     return L.join('\n');
   };
 
-  /** Uji koneksi untuk Inspector */
-  gd.test = async function () {
-    const d = await gd.fetch();
-    const r = d.ringkasan;
-    return `${r.jenisBarang} barang, ${r.poTerbuka + r.poSebagian} PO aktif, ${r.grn} GRN, ${r.barangKeluar} barang keluar`;
-  };
+  // Daftarkan sebagai integrasi umum (fetch, cache per tugas, augment, tes koneksi)
+  const mod = VO.integ.define({
+    key: 'gudang',
+    label: 'Gudang-Document',
+    icon: 'server',
+    endpoint: '/api/gudang',
+    toMarkdown: gd.toMarkdown,
+    simReport: gd.simReport,
+    testText: (d) => { const r = d.ringkasan; return `${r.jenisBarang} barang, ${r.poTerbuka + r.poSebagian} PO aktif, ${r.grn} GRN, ${r.barangKeluar} barang keluar`; },
+    logText: (d) => `${d.ringkasan.jenisBarang} barang, ${d.ringkasan.grn} GRN`,
+    leadNote: 'pakai angka dan nomor dokumen (PO/GRN/BK)',
+  });
+  Object.assign(gd, { fetch: mod.fetch, forTask: mod.forTask, augment: mod.augment, test: mod.test });
 })();
