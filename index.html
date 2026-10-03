@@ -5,21 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Visual Office · Kantor Agent AI</title>
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">🏢</span>
+      <img class="logo" src="favicon.svg" alt="" />
       <input id="companyName" class="company" title="Klik untuk mengganti nama perusahaan" />
     </div>
     <div class="modes" role="tablist">
-      <button id="modeView" class="mode active" title="Mode lihat (V)">👁 Lihat</button>
-      <button id="modeEdit" class="mode" title="Mode edit layout (E)">✏️ Edit Layout</button>
+      <button id="modeView" class="mode active" title="Mode lihat (V)"><i data-icon="eye"></i> Lihat</button>
+      <button id="modeEdit" class="mode" title="Mode edit layout (E)"><i data-icon="layout"></i> Edit Layout</button>
     </div>
     <div class="toolbar">
-      <label class="toggle" title="Karyawan bergerak sendiri (ngopi, ngobrol, dll.)"><input type="checkbox" id="ambient" /> Aktivitas otomatis</label>
-      <label class="toggle" title="Agen mengerjakan tugas dengan AI sungguhan (Gemini gratis)"><input type="checkbox" id="aiMode" /> Mode AI nyata</label>
+      <label class="toggle" title="Karyawan bergerak sendiri (ngopi, ngobrol, dll.)"><input type="checkbox" id="ambient" /><span class="lbl-wide">Aktivitas </span>otomatis</label>
+      <label class="toggle" title="Agen mengerjakan tugas dengan AI sungguhan (Gemini gratis)"><input type="checkbox" id="aiMode" /> <span class="lbl-wide">Mode </span>AI</label>
       <span id="aiStatus" class="pill">…</span>
       <select id="rpm" title="Batas panggilan AI per menit (free tier Gemini ± 10–15/menit)">
         <option value="5">5/mnt</option><option value="10">10/mnt</option><option value="15">15/mnt</option><option value="30">30/mnt</option><option value="60">60/mnt</option>
@@ -27,10 +27,14 @@
       <select id="speed" title="Kecepatan simulasi">
         <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
       </select>
-      <button id="btnFit" title="Tampilkan seluruh kantor (F)">⤢</button>
-      <button id="btnExport" title="Simpan ke file JSON">💾 Export</button>
-      <button id="btnImport" title="Muat dari file JSON">📂 Import</button>
-      <button id="btnReset" class="danger" title="Kembalikan ke kantor contoh">↺ Reset</button>
+      <button id="btnFit" title="Tampilkan seluruh kantor (F)"><i data-icon="maximize"></i></button>
+      <button id="btnExport" title="Simpan ke file JSON"><i data-icon="download"></i><span class="lbl-wide"> Export</span></button>
+      <button id="btnImport" title="Muat dari file JSON"><i data-icon="upload"></i><span class="lbl-wide"> Import</span></button>
+      <button id="btnSample" title="Isi kantor dengan contoh divisi & karyawan"><i data-icon="sparkles"></i><span class="lbl-wide"> Contoh</span></button>
+      <button id="btnReset" class="danger" title="Kosongkan kantor (mulai dari nol)"><i data-icon="reset"></i><span class="lbl-wide"> Kosongkan</span></button>
+      <span class="sep"></span>
+      <span class="who" id="who" title="Kamu adalah Boss"><i data-icon="crown"></i> <span id="whoName">Boss</span></span>
+      <a class="btn" id="btnLogout" href="/api/logout" title="Keluar"><i data-icon="logout"></i></a>
       <input type="file" id="importFile" accept="application/json,.json" hidden />
     </div>
   </header>
@@ -39,7 +43,7 @@
     <aside class="panel left">
       <div class="panel-head">
         <h2>Struktur Organisasi</h2>
-        <button id="addDivision" class="small primary">+ Divisi</button>
+        <button id="addDivision" class="small primary"><i data-icon="plus"></i> Divisi</button>
       </div>
       <div id="orgTree" class="tree"></div>
       <div class="stats" id="stats"></div>
@@ -50,22 +54,33 @@
       <div id="editBar" class="editbar hidden">
         <div class="group">
           <span class="lbl">Alat:</span>
-          <button data-tool="move" class="tool active" title="Geser & ubah ukuran ruangan / zona">✋ Pindah</button>
-          <button data-tool="erase" class="tool" title="Hapus furnitur">🧽 Hapus</button>
+          <button data-tool="move" class="tool active" title="Geser & ubah ukuran ruangan / zona"><i data-icon="hand"></i> Pindah</button>
+          <button data-tool="erase" class="tool" title="Hapus furnitur"><i data-icon="eraser"></i> Hapus</button>
         </div>
         <div class="group" id="furniturePalette"><span class="lbl">Furnitur:</span></div>
         <div class="group">
           <span class="lbl">Ruang:</span>
-          <button data-fac="meeting" class="small">+ Rapat</button>
-          <button data-fac="pantry" class="small">+ Pantry</button>
-          <button data-fac="lounge" class="small">+ Lounge</button>
+          <button data-fac="meeting" class="small"><i data-icon="plus"></i> Rapat</button>
+          <button data-fac="pantry" class="small"><i data-icon="plus"></i> Pantry</button>
+          <button data-fac="lounge" class="small"><i data-icon="plus"></i> Lounge</button>
         </div>
         <div class="group">
           <span class="lbl">Lantai:</span>
           <select id="floorSel"></select>
           <span class="lbl">Peta:</span>
           <input type="number" id="mapW" min="30" max="160" title="Lebar (tile)" />×<input type="number" id="mapH" min="20" max="120" title="Tinggi (tile)" />
-          <button id="btnAuto" class="small primary" title="Susun ulang semua ruangan otomatis">🪄 Tata Otomatis</button>
+          <button id="btnAuto" class="small primary" title="Susun ulang semua ruangan otomatis"><i data-icon="wand"></i> Tata Otomatis</button>
+        </div>
+      </div>
+      <div id="emptyStage" class="empty-stage hidden">
+        <div class="box">
+          <i data-icon="building" class="big"></i>
+          <h2>Kantormu masih kosong</h2>
+          <p>Kamu adalah <b>Boss</b>-nya. Mulai dengan membuat divisi, lalu tambahkan departemen dan rekrut karyawan agent AI.</p>
+          <div class="row">
+            <button class="primary" id="emptyAddDiv"><i data-icon="plus"></i> Tambah Divisi</button>
+            <button id="emptySample"><i data-icon="sparkles"></i> Muat contoh</button>
+          </div>
         </div>
       </div>
       <div class="hint" id="hint">Scroll = zoom · Drag = geser kamera · Klik karyawan untuk detail</div>
@@ -74,7 +89,7 @@
     <aside class="panel right">
       <section class="card" id="inspector"></section>
       <section class="card">
-        <h3>📋 Perintah Boss</h3>
+        <h3><i data-icon="send"></i> Perintah Boss</h3>
         <form id="taskForm" class="task-form">
           <textarea id="taskTitle" rows="2" placeholder="Contoh: Buat rencana peluncuran produk AI baru" required></textarea>
           <div class="row">
@@ -86,14 +101,14 @@
       <section class="card grow">
         <div class="tabs">
           <button class="tab active" data-tab="tasks">Tugas</button>
-          <button class="tab" data-tab="docs">📚 Dokumen <span id="docCount" class="badge">0</span></button>
+          <button class="tab" data-tab="docs"><i data-icon="book"></i> Dokumen <span id="docCount" class="badge">0</span></button>
           <button class="tab" data-tab="log">Aktivitas</button>
         </div>
         <div id="taskList" class="list"></div>
         <div id="docPane" class="list hidden">
           <div class="doc-tools">
             <input type="text" id="docSearch" placeholder="Cari dokumen…" />
-            <button id="docUpload" class="small" title="Unggah .txt / .md sebagai pengetahuan untuk agen">⬆ Unggah</button>
+            <button id="docUpload" class="small" title="Unggah .txt / .md sebagai pengetahuan untuk agen"><i data-icon="upload"></i> Unggah</button>
             <input type="file" id="docFile" accept=".txt,.md,.markdown,.csv,.json,text/*" multiple hidden />
           </div>
           <div id="docList" class="list"></div>
@@ -124,6 +139,7 @@
 
   <div id="toast" class="toast"></div>
 
+  <script src="js/icons.js"></script>
   <script src="js/model.js"></script>
   <script src="js/sim.js"></script>
   <script src="js/ai.js"></script>

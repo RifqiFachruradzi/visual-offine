@@ -23,8 +23,8 @@
     };
     s.tasks.unshift(task);
     if (s.tasks.length > 60) s.tasks.length = 60;
-    VO.log(s, `📋 Boss memberi tugas: "${title}" → ${tasks.targetLabel(s, targetType, targetId)}`);
-    sim.say('boss', '📋 ' + short(title), 4);
+    VO.log(s, `Boss memberi tugas: "${title}" → ${tasks.targetLabel(s, targetType, targetId)}`, 'send');
+    sim.say('boss', short(title), 4, 'task');
     changed();
     run(task).then(
       (report) => {
@@ -34,14 +34,14 @@
         if (task.result) {
           VO.addDoc(S(), { kind: 'report', title: 'Laporan: ' + title, author: tasks.targetLabel(S(), targetType, targetId), taskId: task.id, content: task.result });
         }
-        VO.log(S(), `✅ Tugas selesai: "${title}" — laporan disimpan di Gudang Dokumen`);
-        sim.say('boss', '👏 Mantap, tim!', 3);
+        VO.log(S(), `Tugas selesai: "${title}" — laporan disimpan di Gudang Dokumen`, 'check');
+        sim.say('boss', 'Mantap, tim!', 3, 'check');
         changed();
       },
       (err) => {
         task.status = 'failed';
         task.note = String(err && err.message ? err.message : err);
-        VO.log(S(), `❌ Tugas gagal: "${title}" — ${task.note}`);
+        VO.log(S(), `Tugas gagal: "${title}" — ${task.note}`, 'alert');
         changed();
       }
     );
@@ -92,7 +92,8 @@
     const reports = await Promise.all(
       s.divisions.map((div) => runDivision(task, div, 'boss', true).then((r) => `## Divisi ${div.name}\n${r}`))
     );
-    return summarize(task, S().boss, reports, 'Kamu CEO. Rangkum laporan seluruh divisi menjadi ringkasan eksekutif dan langkah selanjutnya.');
+    // Boss adalah kamu: laporan semua divisi digabung untuk kamu baca (tanpa ringkasan AI)
+    return reports.join('\n\n');
   }
 
   async function runDivision(task, div, superiorId, briefed) {
@@ -106,7 +107,7 @@
     }
     if (!briefed) await brief(dir, superiorId, task);
     task.status = 'in_progress'; changed();
-    sim.say(dir.id, '📣 Tim ' + div.name + ', ada tugas!', 3);
+    sim.say(dir.id, 'Tim ' + div.name + ', ada tugas!', 3, 'megaphone');
     const reps = await Promise.all(depts.map((d) => runDept(task, d, dir.id, false).then((r) => `### ${d.name}\n${r}`)));
     const out = await summarize(task, dir, reps, `Kamu direktur divisi ${div.name}. Rangkum laporan departemen untuk Boss.`);
     await reportTo(dir, superiorId);
@@ -120,7 +121,7 @@
     const lead = members[0];
     if (!briefed) await brief(lead, superiorId, task);
     task.status = 'in_progress'; changed();
-    if (members.length > 1) sim.say(lead.id, '👥 Ayo tim, kita bagi tugas!', 3);
+    if (members.length > 1) sim.say(lead.id, 'Ayo tim, kita bagi tugas!', 3, 'users');
     const roster = members.map((m) => `- ${m.name} (${m.role})`).join('\n');
     const outs = await Promise.all(
       members.map((m) =>
@@ -144,8 +145,8 @@
     const vt = sim.visitorTile(s, superiorId);
     await sim.act(ent.id, [
       A.goto(vt, 'walking'),
-      A.fn(() => sim.say(superiorId, '📋 ' + short(task.title, 30), 3)),
-      A.wait(2.4, 'briefing', VO.pick(['🫡 Siap laksanakan!', '👌 Siap, dimengerti!', '📝 Dicatat!'])),
+      A.fn(() => sim.say(superiorId, short(task.title, 30), 3, 'task')),
+      A.wait(2.4, 'briefing', VO.pick(['Siap laksanakan!', 'Siap, dimengerti!', 'Dicatat!'])),
       ...sim.homeActions(s, ent.id),
     ]);
   }
@@ -156,8 +157,8 @@
     const vt = sim.visitorTile(s, superiorId);
     await sim.act(ent.id, [
       A.goto(vt, 'walking'),
-      A.wait(2.2, 'reporting', '📨 Laporan sudah siap!'),
-      A.fn(() => sim.say(superiorId, VO.pick(['👍 Kerja bagus!', '✅ Diterima', '🔥 Mantap!']), 2.5)),
+      A.wait(2.2, 'reporting', 'Laporan sudah siap!'),
+      A.fn(() => sim.say(superiorId, VO.pick(['Kerja bagus!', 'Diterima', 'Mantap!']), 2.5, 'check')),
       ...sim.homeActions(s, ent.id),
     ]);
   }
@@ -170,11 +171,11 @@
       return;
     }
     task.status = 'meeting'; changed();
-    VO.log(s, `👥 Rapat besar dimulai: "${task.title}"`);
+    VO.log(s, `Rapat besar dimulai: "${task.title}"`, 'meeting');
     const all = [s.boss, ...people];
     await Promise.all(all.map((p, i) => sim.act(p.id, [A.goto(seats[i % seats.length], 'walking')])));
-    sim.say('boss', '📢 Rapat: ' + short(task.title, 28), 4);
-    await Promise.all(all.map((p) => sim.act(p.id, [A.wait(4.5, 'meeting', p.id === 'boss' ? null : VO.pick(['📝 Mencatat...', '🤔 Noted', '💡 Siap, Bos'])) ])));
+    sim.say('boss', 'Rapat: ' + short(task.title, 28), 4, 'megaphone');
+    await Promise.all(all.map((p) => sim.act(p.id, [A.wait(4.5, 'meeting', p.id === 'boss' ? null : VO.pick(['Mencatat...', 'Noted', 'Siap, Bos'])) ])));
     all.forEach((p) => sim.act(p.id, sim.homeActions(S(), p.id)));
   }
 
@@ -189,7 +190,7 @@
       job.start = () => {
         sub.status = 'working'; changed();
         const q = VO.ai.withDocs(S(), prompt, task.title + ' ' + ent.role, task.id);
-        if (q.docs.length) { sub.refs = q.docs.map((d) => d.title); sim.say(ent.id, '📚 Membaca ' + q.docs.length + ' dokumen', 2.5); }
+        if (q.docs.length) { sub.refs = q.docs.map((d) => d.title); sim.say(ent.id, 'Membaca ' + q.docs.length + ' dokumen', 2.5, 'book'); }
         VO.ai.run(
           { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: q.prompt },
           (_, full) => {
@@ -204,7 +205,7 @@
             VO.addDoc(S(), { kind: 'work', title: `${task.title} — ${ent.role}`, author: ent.name, authorId: ent.id, deptId: dept?.id, taskId: task.id, content: full });
             finish('done');
           },
-          (e) => { sub.output = '⚠️ ' + e.message; finish('failed'); }
+          (e) => { sub.output = 'Gagal: ' + e.message; finish('failed'); }
         );
       };
       job.tick = (dt) => { if (job.progress < 0.08) job.progress += dt * 0.01; };
@@ -223,12 +224,12 @@
       job.progress = 1; job.done = true;
       if (st === 'done') VO.remember(VO.findEntity(S(), ent.id), `Tugas "${short(task.title, 60)}": ${String(sub.output).replace(/\s+/g, ' ').slice(0, 300)}`);
       sub.status = st; sub.progress = 1; changed();
-      sim.say(ent.id, st === 'done' ? '✅ Bagianku beres!' : '⚠️ Ada kendala', 2.5);
+      sim.say(ent.id, st === 'done' ? 'Bagianku beres!' : 'Ada kendala', 2.5, st === 'done' ? 'check' : 'alert');
     }
     const seat = VO.seatOf(s, ent);
     const acts = [];
     if (seat) acts.push(A.goto(seat.chair, 'walking'));
-    acts.push(A.fn(() => sim.say(ent.id, '💻 ' + short(ent.role, 24), 2)));
+    acts.push(A.fn(() => sim.say(ent.id, short(ent.role, 24), 2, 'monitor')));
     acts.push(A.work(job));
     let lastPct = 0;
     const iv = setInterval(() => {
@@ -245,7 +246,7 @@
   async function summarize(task, ent, parts, instruction) {
     const joined = parts.join('\n\n');
     if (!task.ai || !stillHere(ent)) return joined;
-    sim.say(ent.id, '🧾 Menyusun laporan...', 3);
+    sim.say(ent.id, 'Menyusun laporan...', 3, 'file');
     try {
       const out = await VO.ai.run(
         { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: `${instruction}\n\nTugas awal: ${task.title}\n\nLaporan masuk:\n${joined}` },
@@ -296,7 +297,7 @@
       ag.shirt = '#d97757';
       sim.dirty = true;
       sim.sync(s);
-      VO.log(s, `🟢 Sesi Claude Code baru masuk kantor: ${ag.name}`);
+      VO.log(s, `Sesi Claude Code baru masuk kantor: ${ag.name}`, 'live');
     }
     return ag;
   }
@@ -318,11 +319,11 @@
     const ag = liveAgent(s, ev);
     const rt = sim.rt.get(ag.id);
     switch (name) {
-      case 'SessionStart': sim.say(ag.id, '👋 Masuk kantor', 3); break;
+      case 'SessionStart': sim.say(ag.id, 'Masuk kantor', 3, 'wave'); break;
       case 'UserPromptSubmit': {
         const p = short(String(ev.prompt || 'Tugas baru'), 30);
-        VO.log(s, `📋 ${ag.name} menerima prompt: "${short(String(ev.prompt || ''), 80)}"`);
-        sim.say('boss', '📋 ' + p, 3);
+        VO.log(s, `${ag.name} menerima prompt: "${short(String(ev.prompt || ''), 80)}"`, 'task');
+        sim.say('boss', p, 3, 'task');
         if (rt) rt.liveTool = 'thinking';
         brief(ag, 'boss', { title: p });
         break;
@@ -330,23 +331,23 @@
       case 'PreToolUse': {
         if (rt) rt.liveTool = ev.tool_name || 'tool';
         const d = toolDetail(ev);
-        sim.say(ag.id, `🔧 ${ev.tool_name || 'tool'}${d ? ' · ' + d : ''}`, 2.5);
+        sim.say(ag.id, `${ev.tool_name || 'tool'}${d ? ' · ' + d : ''}`, 2.5, 'tool');
         break;
       }
       case 'PostToolUse': if (rt) rt.liveTool = 'thinking'; break;
-      case 'SubagentStop': sim.say(ag.id, '🧩 Subagent selesai', 2.5); break;
-      case 'Notification': sim.say(ag.id, '🔔 ' + short(String(ev.message || 'Butuh perhatian'), 34), 5); VO.log(s, `🔔 ${ag.name}: ${ev.message || ''}`); break;
+      case 'SubagentStop': sim.say(ag.id, 'Subagent selesai', 2.5, 'puzzle'); break;
+      case 'Notification': sim.say(ag.id, short(String(ev.message || 'Butuh perhatian'), 34), 5, 'bell'); VO.log(s, `${ag.name}: ${ev.message || ''}`, 'bell'); break;
       case 'Stop':
         if (rt) rt.liveTool = null;
-        VO.log(s, `✅ ${ag.name} selesai merespons`);
+        VO.log(s, `${ag.name} selesai merespons`, 'check');
         reportTo(ag, 'boss');
         break;
       case 'SessionEnd':
-        VO.log(s, `👋 ${ag.name} pulang (sesi berakhir)`);
-        sim.say(ag.id, '👋 Pulang dulu', 2);
+        VO.log(s, `${ag.name} pulang (sesi berakhir)`, 'wave');
+        sim.say(ag.id, 'Pulang dulu', 2, 'wave');
         setTimeout(() => { VO.removeAgent(S(), ag.id); sim.dirty = true; sim.sync(S()); changed(); }, 2200);
         break;
-      default: sim.say(ag.id, '⚡ ' + name, 2);
+      default: sim.say(ag.id, name, 2, 'zap');
     }
     changed();
   };

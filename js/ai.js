@@ -18,6 +18,7 @@
     if (!isHttp()) { ai.reason = 'Dibuka dari file:// — jalankan `npm start` atau deploy ke Vercel untuk mode AI'; return ai; }
     try {
       const r = await fetch('/api/health', { cache: 'no-store' });
+      if (r.status === 401) { location.href = '/login.html'; return ai; }
       const j = await r.json();
       ai.server = true;
       ai.available = !!j.ai;
@@ -29,6 +30,17 @@
       ai.reason = 'Backend tidak terjangkau (mode simulasi)';
     }
     return ai;
+  };
+
+  // Siapa yang login (Boss). null bila login tidak aktif / dibuka dari file://
+  ai.me = async function () {
+    if (!isHttp()) return null;
+    try {
+      const r = await fetch('/api/me', { cache: 'no-store' });
+      if (r.status === 401) { location.href = '/login.html'; return null; }
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) { return null; }
   };
 
   ai.label = () => (ai.providers.includes('gemini') ? 'Gemini' : ai.providers.includes('claude') ? 'Claude' : 'AI');
@@ -62,6 +74,7 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model, system, prompt }),
     });
+    if (r.status === 401) { location.href = '/login.html'; throw new Error('Sesi login habis'); }
     if (!r.ok || !r.body) {
       const e = new Error('HTTP ' + r.status);
       e.status = r.status;
@@ -127,7 +140,7 @@
     return new Promise((resolve, reject) => {
       let attempt = 0;
       const enqueue = () => {
-        onWait && onWait(queue.length ? `⏳ Antre kuota (${queue.length + 1})` : '');
+        onWait && onWait(queue.length ? `Antre kuota (${queue.length + 1})` : '');
         queue.push({
           run: async () => {
             onWait && onWait('');
@@ -137,7 +150,7 @@
               attempt++;
               if ((e.status === 429 || e.status === 503) && attempt <= 4) {
                 const sec = Math.max(5, e.retryAfter || 15) * attempt;
-                onWait && onWait(`⏳ Rate limit, coba lagi ${sec}s`);
+                onWait && onWait(`Rate limit, coba lagi ${sec} detik`);
                 setTimeout(enqueue, sec * 1000);
               } else reject(e);
             }

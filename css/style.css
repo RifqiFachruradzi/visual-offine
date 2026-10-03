@@ -37,7 +37,7 @@ textarea { width: 100%; resize: vertical; }
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.logo { font-size: 22px; }
+.logo { width: 28px; height: 28px; }
 .company { background: transparent; border: 1px solid transparent; font-weight: 700; font-size: 16px; width: 220px; padding: 4px 6px; border-radius: 6px; }
 .company:hover, .company:focus { border-color: var(--line); outline: none; background: #11131a; }
 .modes { display: flex; background: #11131a; border-radius: 9px; padding: 3px; border: 1px solid var(--line); }
@@ -167,3 +167,29 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 .memory { margin: 6px 0 10px; font-size: 12px; }
 .memory .m { border-left: 2px solid #4a5166; padding: 2px 8px; margin: 4px 0; color: #c9cdd6; }
 .result code { background: #232733; padding: 0 4px; border-radius: 4px; }
+
+/* ---------------------------------------------------------------- ikon */
+.ic { width: 15px; height: 15px; vertical-align: -3px; flex: none; }
+button .ic, .btn .ic { margin-right: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; color: var(--text); text-decoration: none; }
+.btn:hover { border-color: #4a5166; }
+.sep { width: 1px; height: 22px; background: var(--line); }
+.who { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.node .ni { color: var(--muted); display: inline-flex; }
+.node.boss .ni, .node .ni.lead { color: var(--accent); }
+.node .ni.director { color: #ce93d8; }
+.node .ni.live { color: #f4a261; }
+.avatar .ic { width: 24px; height: 24px; color: #fff; }
+.log .ic { width: 13px; height: 13px; margin-right: 4px; color: var(--muted); }
+.card h3 .ic { width: 14px; height: 14px; }
+.empty-stage { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.empty-stage .box { pointer-events: auto; background: rgba(27,30,39,.95); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; max-width: 420px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+.empty-stage h2 { margin: 6px 0 6px; font-size: 17px; }
+.empty-stage p { color: var(--muted); line-height: 1.55; margin: 0 0 14px; }
+.empty-stage .big { width: 40px; height: 40px; color: var(--accent); }
+.empty-stage .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* bar atas: label tombol sekunder hanya di layar lebar */
+@media (max-width: 1680px) { .lbl-wide { display: none; } }
+.toolbar { gap: 6px; }
+.company { width: 180px; }

@@ -73,11 +73,20 @@
   };
 
   /* ------------------------------------------------------------ init */
-  function init() {
+  async function init() {
+    VO.hydrateIcons();
+    // Boss = pengguna yang login. Data kantor disimpan terpisah per akun.
+    const me = await VO.ai.me();
+    app.user = me && me.user;
+    if (app.user) VO.STORAGE_KEY = 'visual-office:v2:' + app.user.toLowerCase();
+    $('who').classList.toggle('hidden', !app.user);
+    $('btnLogout').classList.toggle('hidden', !(me && me.authRequired));
+
     let s = VO.load();
     if (!s) s = VO.defaultState();
     s.agents = s.agents.filter((a) => !a.live); // sesi live tidak bertahan setelah reload
     app.state = s;
+    syncBoss();
     sim.sync(s);
 
     const canvas = $('office');
@@ -117,6 +126,7 @@
 
     // panel UI di-refresh dengan ritme rendah agar ringan
     setInterval(() => {
+      emptyStage();
       VO.ui.renderTree();
       VO.ui.renderInspector();
       if (app._dirty) {
@@ -132,10 +142,23 @@
     window.addEventListener('beforeunload', () => VO.save(app.state));
   }
 
+  function syncBoss() {
+    const b = app.state.boss;
+    if (app.user) b.name = app.user;
+    b.role = 'Boss (Kamu)';
+    $('whoName').textContent = b.name;
+  }
+
+  function emptyStage() {
+    $('emptyStage').classList.toggle('hidden', app.state.divisions.length > 0 || app.ui.edit);
+  }
+
   function aiPill() {
     const p = $('aiStatus');
     const s = app.state;
-    p.textContent = VO.ai.available ? (s.settings.aiMode ? `🧠 ${VO.ai.label()} aktif` : `🧠 ${VO.ai.label()} siap`) : '🎲 Simulasi';
+    p.innerHTML = VO.ai.available
+      ? VO.icon('sparkles') + ' ' + VO.ai.label() + (s.settings.aiMode ? ' aktif' : ' siap')
+      : VO.icon('dice') + ' Simulasi';
     p.title = VO.ai.reason;
     p.classList.toggle('on', VO.ai.available && s.settings.aiMode);
     $('aiMode').disabled = !VO.ai.available;
@@ -176,7 +199,7 @@
     $('aiMode').onchange = (e) => {
       s().settings.aiMode = e.target.checked;
       aiPill(); app.changed();
-      VO.ui.toast(e.target.checked ? `🧠 Tugas baru akan dikerjakan oleh ${VO.ai.label()}` : '🎲 Kembali ke mode simulasi');
+      VO.ui.toast(e.target.checked ? `Tugas baru akan dikerjakan oleh ${VO.ai.label()}` : 'Kembali ke mode simulasi', e.target.checked ? 'sparkles' : 'dice');
     };
     $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
@@ -196,16 +219,25 @@
       try {
         const st = VO.migrate(JSON.parse(await f.text()));
         replaceState(st);
-        VO.ui.toast('📂 Kantor dimuat: ' + st.company.name);
+        VO.ui.toast('Kantor dimuat: ' + st.company.name, 'upload');
       } catch (err) {
-        VO.ui.toast('⚠️ Gagal import: ' + err.message);
+        VO.ui.toast('Gagal import: ' + err.message, 'alert');
       }
       e.target.value = '';
     };
     $('btnReset').onclick = async () => {
-      if (!(await VO.ui.confirm('Reset kantor ke contoh awal? Semua perubahan hilang.'))) return;
-      replaceState(VO.defaultState());
+      if (!(await VO.ui.confirm('Kosongkan kantor? Semua divisi, karyawan, tugas, dan dokumen akan dihapus.'))) return;
+      replaceState(VO.emptyState());
+      VO.ui.toast('Kantor dikosongkan — mulai dari nol', 'reset');
     };
+    const loadSample = async () => {
+      if (s().divisions.length && !(await VO.ui.confirm('Ganti kantor saat ini dengan kantor contoh?'))) return;
+      replaceState(VO.sampleState(s()));
+      VO.ui.toast('Kantor contoh dimuat', 'sparkles');
+    };
+    $('btnSample').onclick = loadSample;
+    $('emptySample').onclick = loadSample;
+    $('emptyAddDiv').onclick = () => VO.ui.addDivision();
     $('addDivision').onclick = () => VO.ui.addDivision();
 
     document.addEventListener('keydown', (e) => {
@@ -222,6 +254,7 @@
     for (const rt of sim.rt.values()) sim.flush(rt);
     sim.rt.clear();
     app.state = st;
+    syncBoss();
     app.sel = null;
     R.selected = null;
     app.layoutChanged();
@@ -251,7 +284,7 @@
         const def = VO.FACILITY_TYPES[fac.dataset.fac];
         const spot = app.findFreeRect(def.w, def.h);
         const f = VO.addFacility(app.state, fac.dataset.fac, spot);
-        VO.log(app.state, `🚪 Ruangan baru: ${f.name}`);
+        VO.log(app.state, `Ruangan baru: ${f.name}`, 'door');
         app.layoutChanged();
         app.select({ kind: 'facility', id: f.id }, true);
       }
@@ -270,7 +303,7 @@
       VO.autoLayout(app.state);
       app.layoutChanged();
       R.fit($('office'), app.state);
-      VO.ui.toast('🪄 Layout dirapikan');
+      VO.ui.toast('Layout dirapikan', 'wand');
     };
   }
 
@@ -283,7 +316,7 @@
       const [targetType, targetId] = $('taskTarget').value.split(':');
       const t = VO.tasks.create({ title, targetType, targetId });
       $('taskTitle').value = '';
-      VO.ui.toast(t.ai ? `🧠 Tugas dikirim — agen memakai ${VO.ai.label()}` : '📋 Tugas dikirim ke tim');
+      VO.ui.toast(t.ai ? `Tugas dikirim — agen memakai ${VO.ai.label()}` : 'Tugas dikirim ke tim', 'send');
     });
     $('taskTitle').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('taskForm').requestSubmit();

@@ -58,11 +58,12 @@
       ctx.setLineDash([]); ctx.lineWidth = 1;
       // label
       ctx.font = 'bold 15px Inter, system-ui, sans-serif';
-      const label = '🏛 Divisi ' + div.name;
+      const label = 'Divisi ' + div.name;
       const tw = ctx.measureText(label).width;
       const lx = (div.directorDesk.x + 1.8) * T, ly = z.y * T + 6;
-      ctx.fillStyle = div.color; rr(ctx, lx, ly, tw + 16, 22, 6); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(label, lx + 8, ly + 16);
+      ctx.fillStyle = div.color; rr(ctx, lx, ly, tw + 36, 22, 6); ctx.fill();
+      VO.drawIcon(ctx, 'layers', lx + 15, ly + 11, 13, '#fff');
+      ctx.fillStyle = '#fff'; ctx.fillText(label, lx + 27, ly + 16);
       drawDesk(ctx, div.directorDesk.x, div.directorDesk.y, '#4a3b55');
       drawChair(ctx, div.directorDesk.x, div.directorDesk.y + 1);
     }
@@ -270,7 +271,6 @@
     }
   }
 
-  const STATUS_ICON = { working: '💻', coffee: '☕', meeting: '👥', briefing: '📋', reporting: '📨', chat: '💬', break: '🌿' };
 
   function drawPerson(ctx, s, ent, rt, now) {
     const x = rt.x, y = rt.y;
@@ -325,19 +325,11 @@
       ctx.fillStyle = '#ffca28';
       ctx.beginPath(); ctx.moveTo(x - 6, hy - 7); ctx.lineTo(x - 6, hy - 13); ctx.lineTo(x - 3, hy - 9); ctx.lineTo(x, hy - 14); ctx.lineTo(x + 3, hy - 9); ctx.lineTo(x + 6, hy - 13); ctx.lineTo(x + 6, hy - 7); ctx.closePath(); ctx.fill();
     } else if (ent.isDirector || ent.isLead) {
-      ctx.fillStyle = ent.isDirector ? '#ab47bc' : '#ffb300';
-      ctx.beginPath(); ctx.arc(x + 8, hy - 6, 4, 0, 7); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(ent.isDirector ? 'D' : '★', x + 8, hy - 4); ctx.textAlign = 'left';
+      VO.drawIcon(ctx, ent.isDirector ? 'briefcase' : 'star', x + 8, hy - 6, 5.5, '#fff', ent.isDirector ? '#ab47bc' : '#ffb300');
     }
     // ikon status
-    const icon = rt.liveTool && rt.liveTool !== 'thinking' ? '🔧' : rt.liveTool === 'thinking' ? '🧠' : STATUS_ICON[rt.status];
-    if (icon) {
-      ctx.font = '10px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(icon, x - 10, hy - 6);
-      ctx.textAlign = 'left';
-    }
+    const icon = rt.liveTool && rt.liveTool !== 'thinking' ? 'tool' : rt.liveTool === 'thinking' ? 'brain' : VO.sim.STATUS_ICON[rt.status];
+    if (icon) VO.drawIcon(ctx, icon, x - 11, hy - 6, 6.5, '#1d1f27', 'rgba(255,255,255,0.92)');
     // progress bar kerja
     if (rt.working && rt.progress > 0 && rt.progress < 1 && !ent.live) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x - 11, hy - 15, 22, 4);
@@ -356,8 +348,10 @@
   function drawBubble(ctx, rt, now) {
     if (!rt.bubble || rt.bubble.until < now) return;
     const text = rt.bubble.text;
-    ctx.font = '10px Inter, system-ui, "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji", sans-serif';
-    const tw = Math.min(180, ctx.measureText(text).width);
+    const icon = rt.bubble.icon;
+    ctx.font = '10px Inter, system-ui, sans-serif';
+    const iw = icon ? 13 : 0;
+    const tw = Math.min(180, ctx.measureText(text).width) + iw;
     const x = rt.x - tw / 2 - 6, y = rt.y - 46;
     const fade = Math.min(1, (rt.bubble.until - now) / 300);
     ctx.globalAlpha = fade;
@@ -365,8 +359,10 @@
     ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(rt.x - 4, y + 17); ctx.lineTo(rt.x, y + 22); ctx.lineTo(rt.x + 4, y + 17); ctx.fill();
     ctx.fillStyle = '#1d1f27';
+    if (icon) VO.drawIcon(ctx, icon, x + 11, y + 8.5, 9, '#4f8cff');
+    ctx.fillStyle = '#1d1f27';
     ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y, tw + 4, 17); ctx.clip();
-    ctx.fillText(text, x + 6, y + 12); ctx.restore();
+    ctx.fillText(text, x + 6 + iw, y + 12); ctx.restore();
     ctx.globalAlpha = 1;
   }
 

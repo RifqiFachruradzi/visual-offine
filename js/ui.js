@@ -11,9 +11,9 @@
 
   /* ------------------------------------------------------------ toast & dialog */
   let toastT;
-  ui.toast = function (msg) {
+  ui.toast = function (msg, icon = 'info') {
     const t = $('toast');
-    t.textContent = msg;
+    t.innerHTML = VO.icon(icon) + ' ' + esc(msg);
     t.classList.add('show');
     clearTimeout(toastT);
     toastT = setTimeout(() => t.classList.remove('show'), 2200);
@@ -75,7 +75,7 @@
     const spot = app().findFreeRect(14, 11);
     VO.setZone(s, div, { x: spot.x, y: spot.y, w: 14, h: 11 }, false);
     div.directorDesk = { x: spot.x + 2, y: spot.y + 1 };
-    VO.log(s, `🏛 Divisi baru: ${div.name}`);
+    VO.log(s, `Divisi baru: ${div.name}`, 'layers');
     app().layoutChanged();
     app().select({ kind: 'division', id: div.id });
   };
@@ -99,7 +99,7 @@
     const n = VO.clamp(parseInt(v.count, 10) || 0, 0, 20);
     for (let i = 0; i < n; i++) VO.addAgent(s, dept.id, { role: 'Staff' });
     app().fitZone(div);
-    VO.log(s, `🏢 Departemen baru: ${dept.name} (${n + 1} agen)`);
+    VO.log(s, `Departemen baru: ${dept.name} (${n + 1} agen)`, 'building');
     app().layoutChanged();
     app().select({ kind: 'dept', id: dept.id });
   };
@@ -111,13 +111,22 @@
     const a = VO.addAgent(s, deptId, v);
     const dept = s.departments.find((d) => d.id === deptId);
     app().fitZone(s.divisions.find((d) => d.id === dept.divisionId));
-    VO.log(s, `🤝 ${a.name} bergabung sebagai ${a.role} di ${dept.name}`);
+    VO.log(s, `${a.name} bergabung sebagai ${a.role} di ${dept.name}`, 'user');
     app().layoutChanged();
     app().select({ kind: 'agent', id: a.id });
   };
 
   async function agentForm(title, a, isNew) {
     const s = S();
+    if (a.id === 'boss') {
+      // Boss = kamu: tidak ada model / prompt AI. Nama mengikuti akun login bila ada.
+      const bf = [{ key: 'colors', label: 'Penampilan (baju · rambut · kulit)', type: 'colors', value: [a.shirt, a.hair, a.skin], names: ['Baju', 'Rambut', 'Kulit'] }];
+      if (!VO.app.user) bf.unshift({ key: 'name', label: 'Nama kamu', value: a.name, required: true });
+      const v = await ui.form('Profil Boss (kamu)', bf);
+      if (!v) return null;
+      const [shirt, hair, skin] = v.colors;
+      return { name: v.name || a.name, shirt, hair, skin };
+    }
     const fields = [
       { key: 'name', label: 'Nama', value: a.name, required: true },
       { key: 'role', label: 'Jabatan / peran', value: a.role },
@@ -150,7 +159,7 @@
       const dept = s.departments.find((d) => d.id === v.deptId);
       VO.ensureRoomCapacity(s, dept);
       app().fitZone(s.divisions.find((d) => d.id === dept.divisionId));
-      VO.log(s, `🔀 ${a.name} pindah ke ${dept.name}`);
+      VO.log(s, `${a.name} pindah ke ${dept.name}`, 'users');
     }
     if (v.isLead) s.agents.filter((x) => x.deptId === a.deptId && x !== a).forEach((x) => (x.isLead = false));
     app().layoutChanged();
@@ -185,7 +194,7 @@
     if (v.divisionId !== d.divisionId) {
       d.divisionId = v.divisionId;
       s.agents.filter((a) => a.deptId === d.id).forEach((a) => (a.divisionId = v.divisionId));
-      VO.log(s, `🔀 Departemen ${d.name} pindah ke divisi ${s.divisions.find((x) => x.id === v.divisionId).name} (klik 🪄 Tata Otomatis untuk merapikan)`);
+      VO.log(s, `Departemen ${d.name} pindah ke divisi ${s.divisions.find((x) => x.id === v.divisionId).name} (klik Tata Otomatis untuk merapikan)`, 'layers');
     }
     app().layoutChanged();
   };
@@ -213,7 +222,7 @@
     if (!(await ui.confirm('Hapus ' + names[kind]() + '?'))) return;
     if (kind === 'division') VO.removeDivision(s, id);
     if (kind === 'dept') VO.removeDepartment(s, id);
-    if (kind === 'agent') { const a = VO.findEntity(s, id); VO.removeAgent(s, id); VO.log(s, `👋 ${a.name} keluar dari perusahaan`); }
+    if (kind === 'agent') { const a = VO.findEntity(s, id); VO.removeAgent(s, id); VO.log(s, `${a.name} keluar dari perusahaan`, 'wave'); }
     if (kind === 'facility') s.facilities = s.facilities.filter((f) => f.id !== id);
     app().select(null);
     app().layoutChanged();
@@ -223,7 +232,7 @@
     const s = S();
     const a = VO.findEntity(s, id);
     s.agents.filter((x) => x.deptId === a.deptId).forEach((x) => (x.isLead = x === a));
-    VO.log(s, `⭐ ${a.name} sekarang ketua tim`);
+    VO.log(s, `${a.name} sekarang ketua tim`, 'star');
     app().layoutChanged();
   };
 
@@ -234,36 +243,37 @@
   };
 
   /* ------------------------------------------------------------ pohon organisasi */
-  const acts = (btns) => `<span class="acts">${btns.map(([a, t, ic]) => `<button class="icon" data-act="${a}" title="${t}">${ic}</button>`).join('')}</span>`;
+  const acts = (btns) => `<span class="acts">${btns.map(([a, t, ic]) => `<button class="icon" data-act="${a}" title="${t}">${VO.icon(ic)}</button>`).join('')}</span>`;
+  const ni = (name, cls = '') => `<span class="ni ${cls}">${VO.icon(name)}</span>`;
 
   ui.renderTree = function () {
     const s = S();
     const sel = VO.app.sel;
     const isSel = (k, id) => sel && sel.kind === k && sel.id === id ? 'sel' : '';
     const busy = (id) => (VO.sim.isBusy(id) ? '<span class="badge busy">sibuk</span>' : '');
-    let h = `<div class="node boss ${isSel('agent', 'boss')}" data-kind="agent" data-id="boss"><span>👑</span><span class="name">${esc(s.boss.name)} <span class="sub">· ${esc(s.boss.role)}</span></span>${acts([['edit', 'Edit', '✏️']])}</div>`;
+    let h = `<div class="node boss ${isSel('agent', 'boss')}" data-kind="agent" data-id="boss">${ni('crown')}<span class="name">${esc(s.boss.name)} <span class="sub">· ${esc(s.boss.role)}</span></span>${acts([['edit', 'Edit', 'edit']])}</div>`;
     for (const div of s.divisions) {
       const depts = s.departments.filter((d) => d.divisionId === div.id);
-      h += `<div class="node div ${isSel('division', div.id)}" data-kind="division" data-id="${div.id}"><span class="dot" style="background:${esc(div.color)}"></span><span class="name">${esc(div.name)}</span>${acts([['addDept', 'Tambah departemen', '＋'], ['assign', 'Beri tugas', '📋'], ['edit', 'Edit', '✏️'], ['del', 'Hapus', '🗑']])}</div>`;
+      h += `<div class="node div ${isSel('division', div.id)}" data-kind="division" data-id="${div.id}"><span class="dot" style="background:${esc(div.color)}"></span><span class="name">${esc(div.name)}</span>${acts([['addDept', 'Tambah departemen', 'plus'], ['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
       const dir = VO.director(s, div.id);
-      if (dir) h += `<div class="node director ${isSel('agent', dir.id)}" data-kind="agent" data-id="${dir.id}"><span>👔</span><span class="name">${esc(dir.name)} <span class="sub">· ${esc(dir.role)}</span></span>${busy(dir.id)}${acts([['edit', 'Edit', '✏️'], ['del', 'Hapus', '🗑']])}</div>`;
+      if (dir) h += `<div class="node director ${isSel('agent', dir.id)}" data-kind="agent" data-id="${dir.id}">${ni('briefcase', 'director')}<span class="name">${esc(dir.name)} <span class="sub">· ${esc(dir.role)}</span></span>${busy(dir.id)}${acts([['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
       for (const d of depts) {
         const ag = VO.deptAgents(s, d.id);
-        h += `<div class="node dept ${isSel('dept', d.id)}" data-kind="dept" data-id="${d.id}"><span>🏢</span><span class="name">${esc(d.name)}</span><span class="badge">${ag.length}</span>${acts([['addAgent', 'Rekrut agen', '＋'], ['assign', 'Beri tugas', '📋'], ['edit', 'Edit', '✏️'], ['del', 'Hapus', '🗑']])}</div>`;
+        h += `<div class="node dept ${isSel('dept', d.id)}" data-kind="dept" data-id="${d.id}">${ni('building')}<span class="name">${esc(d.name)}</span><span class="badge">${ag.length}</span>${acts([['addAgent', 'Rekrut agen', 'plus'], ['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
         for (const a of ag)
-          h += `<div class="node agent ${isSel('agent', a.id)}" data-kind="agent" data-id="${a.id}"><span>${a.live ? '🟠' : a.isLead ? '⭐' : '🤖'}</span><span class="name">${esc(a.name)} <span class="sub">· ${esc(a.role)}</span></span>${busy(a.id)}${acts([['assign', 'Beri tugas', '📋'], ['edit', 'Edit', '✏️'], ['del', 'Hapus', '🗑']])}</div>`;
+          h += `<div class="node agent ${isSel('agent', a.id)}" data-kind="agent" data-id="${a.id}">${a.live ? ni('live', 'live') : a.isLead ? ni('star', 'lead') : ni('bot')}<span class="name">${esc(a.name)} <span class="sub">· ${esc(a.role)}</span></span>${busy(a.id)}${acts([['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
       }
     }
-    if (!s.divisions.length) h += `<p class="empty">Belum ada divisi. Klik <b>+ Divisi</b> untuk mulai membangun kantor.</p>`;
-    h += `<div class="node" style="margin-top:10px;color:var(--muted)" data-kind="none"><span>🚪</span><span class="name">Fasilitas</span></div>`;
+    if (!s.divisions.length) h += `<p class="empty">Belum ada divisi. Klik <b>Divisi</b> di atas untuk mulai membangun kantor.</p>`;
+    h += `<div class="node" style="margin-top:10px;color:var(--muted)" data-kind="none">${ni('door')}<span class="name">Fasilitas</span></div>`;
     for (const f of s.facilities)
-      h += `<div class="node dept ${isSel('facility', f.id)}" data-kind="facility" data-id="${f.id}"><span class="dot" style="background:${esc(f.color)}"></span><span class="name">${esc(f.name)}</span>${acts(f.type === 'boss' ? [['edit', 'Edit', '✏️']] : [['edit', 'Edit', '✏️'], ['del', 'Hapus', '🗑']])}</div>`;
+      h += `<div class="node dept ${isSel('facility', f.id)}" data-kind="facility" data-id="${f.id}"><span class="dot" style="background:${esc(f.color)}"></span><span class="name">${esc(f.name)}</span>${acts(f.type === 'boss' ? [['edit', 'Edit', 'edit']] : [['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
     const tree = $('orgTree');
     if (tree._html !== h) { tree.innerHTML = h; tree._html = h; }
 
     const nAg = s.agents.length;
     const nBusy = s.agents.filter((a) => VO.sim.isBusy(a.id)).length;
-    $('stats').innerHTML = `<span>🏛 ${s.divisions.length} divisi</span><span>🏢 ${s.departments.length} dept</span><span>🤖 ${nAg} agen</span><span>⚡ ${nBusy} sibuk</span>`;
+    $('stats').innerHTML = `<span>${VO.icon('layers')} ${s.divisions.length} divisi</span><span>${VO.icon('building')} ${s.departments.length} dept</span><span>${VO.icon('bot')} ${nAg} agen</span><span>${VO.icon('zap')} ${nBusy} sibuk</span>`;
   };
 
   ui.bindTree = function () {
@@ -283,7 +293,7 @@
   };
 
   /* ------------------------------------------------------------ inspector */
-  const STATUS_TXT = { idle: 'Santai di meja', walking: 'Berjalan', working: 'Bekerja 💻', coffee: 'Ngopi ☕', meeting: 'Rapat 👥', briefing: 'Menerima briefing 📋', reporting: 'Melapor 📨', chat: 'Ngobrol 💬', break: 'Istirahat 🌿' };
+  const STATUS_TXT = { idle: 'Santai di meja', walking: 'Berjalan', working: 'Bekerja', coffee: 'Ngopi', meeting: 'Rapat', briefing: 'Menerima briefing', reporting: 'Melapor', chat: 'Ngobrol', break: 'Istirahat' };
 
   ui.renderInspector = function () {
     const s = S();
@@ -291,7 +301,7 @@
     const el = $('inspector');
     let h = '';
     if (!sel) {
-      h = `<h3>🔍 Inspector</h3><p class="empty">Klik karyawan, ruangan, atau item di struktur organisasi untuk melihat detail.<br/><br/>👑 <b>Boss</b> memberi perintah → 👔 <b>Direktur</b> → ⭐ <b>Ketua tim</b> → 🤖 <b>Anggota</b>. Setiap level briefing, bekerja, lalu melapor balik.</p>`;
+      h = `<h3>${VO.icon('search')} Inspector</h3><p class="empty">Klik karyawan, ruangan, atau item di struktur organisasi untuk melihat detail.<br/><br/><b>Kamu (Boss)</b> memberi perintah → <b>Direktur</b> → <b>Ketua tim</b> → <b>Anggota</b>. Setiap level briefing, bekerja, lalu melapor balik.</p>`;
     } else if (sel.kind === 'agent') {
       const a = VO.findEntity(s, sel.id);
       if (!a) return VO.app.select(null);
@@ -300,45 +310,45 @@
       const div = s.divisions.find((d) => d.id === a.divisionId);
       const model = VO.MODELS.find((m) => m.id === a.model)?.label || a.model;
       const running = s.tasks.flatMap((t) => t.subtasks.filter((st) => st.agentId === a.id && st.status === 'working').map((st) => t.title));
-      const icon = a.id === 'boss' ? '👑' : a.isDirector ? '👔' : a.isLead ? '⭐' : a.live ? '🟠' : '🤖';
-      h = `<div class="insp-head"><div class="avatar" style="background:${esc(a.shirt)}"><span style="font-size:22px">${icon}</span></div><div><div class="insp-name">${esc(a.name)}</div><div class="insp-role">${esc(a.role)}</div></div></div>
+      const icon = a.id === 'boss' ? 'crown' : a.isDirector ? 'briefcase' : a.isLead ? 'star' : a.live ? 'live' : 'bot';
+      h = `<div class="insp-head"><div class="avatar" style="background:${esc(a.shirt)}">${VO.icon(icon)}</div><div><div class="insp-name">${esc(a.name)}</div><div class="insp-role">${esc(a.role)}</div></div></div>
         <div class="kv">
           <span>Status</span><span>${esc(rt?.liveTool && rt.liveTool !== 'thinking' ? 'Pakai tool: ' + rt.liveTool : STATUS_TXT[rt?.status] || rt?.status || '-')}</span>
-          <span>Model</span><span>${esc(model)}</span>
+          ${a.id !== 'boss' ? `<span>Model</span><span>${esc(model)}</span>` : `<span>Peran</span><span>Kamu — pemberi perintah</span>`}
           ${div ? `<span>Divisi</span><span>${esc(div.name)}</span>` : ''}
           ${dept ? `<span>Departemen</span><span>${esc(dept.name)}</span>` : ''}
           ${running.length ? `<span>Mengerjakan</span><span>${running.map(esc).join('<br/>')}</span>` : ''}
           ${a.prompt ? `<span>Instruksi</span><span>${esc(a.prompt)}</span>` : ''}
         </div>
-        ${a.memory && a.memory.length ? `<div class="memory"><b>🧠 Ingatan (${a.memory.length})</b>${a.memory.map((m) => `<div class="m">${esc(m.text)}</div>`).join('')}</div>` : ''}
+        ${a.memory && a.memory.length ? `<div class="memory"><b>${VO.icon('brain')} Ingatan (${a.memory.length})</b>${a.memory.map((m) => `<div class="m">${esc(m.text)}</div>`).join('')}</div>` : ''}
         <div class="btns">
-          <button class="small" data-i="edit">✏️ Edit</button>
-          ${a.id !== 'boss' ? `<button class="small" data-i="assign">📋 Beri tugas</button>` : ''}
-          ${a.deptId && !a.isLead && !a.live ? `<button class="small" data-i="lead">⭐ Jadikan lead</button>` : ''}
-          ${a.memory && a.memory.length ? `<button class="small" data-i="forget">🧹 Lupakan</button>` : ''}
-          ${a.id !== 'boss' ? `<button class="small danger" data-i="del">🗑 Hapus</button>` : ''}
+          <button class="small" data-i="edit">${VO.icon('edit')} Edit</button>
+          ${a.id !== 'boss' ? `<button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button>` : ''}
+          ${a.deptId && !a.isLead && !a.live ? `<button class="small" data-i="lead">${VO.icon('star')} Jadikan lead</button>` : ''}
+          ${a.memory && a.memory.length ? `<button class="small" data-i="forget">${VO.icon('eraser')} Lupakan</button>` : ''}
+          ${a.id !== 'boss' ? `<button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button>` : ''}
         </div>`;
     } else if (sel.kind === 'dept') {
       const d = s.departments.find((x) => x.id === sel.id);
       if (!d) return VO.app.select(null);
       const ag = VO.deptAgents(s, d.id);
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      h = `<div class="insp-head"><div class="avatar" style="background:${esc(div?.color || '#555')}"><span style="font-size:22px">🏢</span></div><div><div class="insp-name">${esc(d.name)}</div><div class="insp-role">Departemen · ${esc(div?.name || '-')}</div></div></div>
+      h = `<div class="insp-head"><div class="avatar" style="background:${esc(div?.color || '#555')}">${VO.icon('building')}</div><div><div class="insp-name">${esc(d.name)}</div><div class="insp-role">Departemen · ${esc(div?.name || '-')}</div></div></div>
         <div class="kv"><span>Ketua</span><span>${esc(ag[0]?.name || '-')}</span><span>Anggota</span><span>${ag.length} agen</span><span>Kapasitas</span><span>${VO.deskSlots(d.room).length} meja</span></div>
-        <div class="btns"><button class="small" data-i="addAgent">＋ Rekrut agen</button><button class="small" data-i="assign">📋 Beri tugas</button><button class="small" data-i="edit">✏️ Edit</button><button class="small danger" data-i="del">🗑 Hapus</button></div>`;
+        <div class="btns"><button class="small" data-i="addAgent">${VO.icon('plus')} Rekrut agen</button><button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button><button class="small" data-i="edit">${VO.icon('edit')} Edit</button><button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button></div>`;
     } else if (sel.kind === 'division') {
       const d = s.divisions.find((x) => x.id === sel.id);
       if (!d) return VO.app.select(null);
       const depts = s.departments.filter((x) => x.divisionId === d.id);
       const dir = VO.director(s, d.id);
-      h = `<div class="insp-head"><div class="avatar" style="background:${esc(d.color)}"><span style="font-size:22px">🏛</span></div><div><div class="insp-name">${esc(d.name)}</div><div class="insp-role">Divisi</div></div></div>
+      h = `<div class="insp-head"><div class="avatar" style="background:${esc(d.color)}">${VO.icon('layers')}</div><div><div class="insp-name">${esc(d.name)}</div><div class="insp-role">Divisi</div></div></div>
         <div class="kv"><span>Direktur</span><span>${esc(dir?.name || '— (tanpa direktur)')}</span><span>Departemen</span><span>${depts.map((x) => esc(x.name)).join(', ') || '-'}</span><span>Total agen</span><span>${s.agents.filter((a) => a.divisionId === d.id).length}</span></div>
-        <div class="btns"><button class="small" data-i="addDept">＋ Departemen</button><button class="small" data-i="assign">📋 Beri tugas</button><button class="small" data-i="edit">✏️ Edit</button><button class="small danger" data-i="del">🗑 Hapus</button></div>`;
+        <div class="btns"><button class="small" data-i="addDept">${VO.icon('plus')} Departemen</button><button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button><button class="small" data-i="edit">${VO.icon('edit')} Edit</button><button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button></div>`;
     } else if (sel.kind === 'facility') {
       const f = s.facilities.find((x) => x.id === sel.id);
       if (!f) return VO.app.select(null);
-      h = `<div class="insp-head"><div class="avatar" style="background:${esc(f.color)}"><span style="font-size:22px">🚪</span></div><div><div class="insp-name">${esc(f.name)}</div><div class="insp-role">${esc(VO.FACILITY_TYPES[f.type].label)} · ${f.w}×${f.h}</div></div></div>
-        <div class="btns" style="margin-top:10px"><button class="small" data-i="edit">✏️ Edit</button>${f.type !== 'boss' ? '<button class="small danger" data-i="del">🗑 Hapus</button>' : ''}</div>`;
+      h = `<div class="insp-head"><div class="avatar" style="background:${esc(f.color)}">${VO.icon('door')}</div><div><div class="insp-name">${esc(f.name)}</div><div class="insp-role">${esc(VO.FACILITY_TYPES[f.type].label)} · ${f.w}×${f.h}</div></div></div>
+        <div class="btns" style="margin-top:10px"><button class="small" data-i="edit">${VO.icon('edit')} Edit</button>${f.type !== 'boss' ? `<button class="small danger" data-i="del">${VO.icon('trash')} Hapus</button>` : ''}</div>`;
     }
     if (el._html !== h) { el.innerHTML = h; el._html = h; }
   };
@@ -352,7 +362,7 @@
       if (i === 'edit') ({ agent: ui.editEntity, division: ui.editDivision, dept: ui.editDept, facility: ui.editFacility })[sel.kind](sel.id);
       if (i === 'del') ui.remove(sel.kind, sel.id);
       if (i === 'lead') ui.makeLead(sel.id);
-      if (i === 'forget') { const a = VO.findEntity(S(), sel.id); a.memory = []; VO.app.changed(); ui.toast('🧹 Ingatan ' + a.name + ' dihapus'); }
+      if (i === 'forget') { const a = VO.findEntity(S(), sel.id); a.memory = []; VO.app.changed(); ui.toast('Ingatan ' + a.name + ' dihapus', 'eraser'); }
       if (i === 'addAgent') ui.addAgent(sel.id);
       if (i === 'addDept') ui.addDept(sel.id);
       if (i === 'assign') ui.assign(sel.kind, sel.id);
@@ -364,9 +374,9 @@
     const s = S();
     const sel = $('taskTarget');
     const cur = sel.value;
-    let h = `<option value="all:">🏢 Seluruh kantor (rapat besar)</option>`;
+    let h = `<option value="all:">Seluruh kantor (rapat besar)</option>`;
     for (const div of s.divisions) {
-      h += `<optgroup label="🏛 ${esc(div.name)}"><option value="division:${div.id}">Seluruh divisi ${esc(div.name)}</option>`;
+      h += `<optgroup label="Divisi ${esc(div.name)}"><option value="division:${div.id}">Seluruh divisi ${esc(div.name)}</option>`;
       for (const d of s.departments.filter((x) => x.divisionId === div.id)) {
         h += `<option value="dept:${d.id}">› Tim ${esc(d.name)}</option>`;
         for (const a of VO.deptAgents(s, d.id)) h += `<option value="agent:${a.id}">   · ${esc(a.name)} (${esc(a.role)})</option>`;
@@ -390,14 +400,14 @@
       const n = t.subtasks.length;
       const p = t.status === 'done' ? 1 : n ? t.subtasks.reduce((a, b) => a + (b.progress || 0), 0) / n : 0.03;
       h += `<div class="task" data-id="${t.id}"><div class="t">${esc(t.title)}</div>
-        <div class="meta"><span class="st ${t.status}">${ST_TXT[t.status] || t.status}</span><span>→ ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))}</span><span>· ${n} subtugas</span>${t.ai ? '<span>· 🧠 AI</span>' : ''}</div>
+        <div class="meta"><span class="st ${t.status}">${ST_TXT[t.status] || t.status}</span><span>→ ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))}</span><span>· ${n} subtugas</span>${t.ai ? `<span>· ${VO.icon('sparkles')} AI</span>` : ''}</div>
         <div class="bar"><i style="width:${Math.round(p * 100)}%"></i></div></div>`;
     }
     if (!h) h = `<p class="empty">Belum ada tugas. Tulis perintah di atas lalu klik <b>Kirim</b> — lihat bagaimana kantor bergerak!</p>`;
     if (tl._html !== h) { tl.innerHTML = h; tl._html = h; }
 
     const ll = $('logList');
-    const lh = s.log.slice(0, 120).map((l) => `<div class="log"><time>${fmtTime(l.t)}</time>${esc(l.text)}</div>`).join('');
+    const lh = s.log.slice(0, 120).map((l) => `<div class="log"><time>${fmtTime(l.t)}</time>${VO.icon(l.icon || 'activity')}${esc(l.text)}</div>`).join('');
     if (ll._html !== lh) { ll.innerHTML = lh; ll._html = lh; }
   };
 
@@ -408,9 +418,9 @@
     const s = S();
     const q = ($('docSearch').value || '').toLowerCase().trim();
     const list = q ? s.docs.filter((d) => (d.title + ' ' + d.author + ' ' + d.content).toLowerCase().includes(q)) : s.docs;
-    let h = list.slice(0, 150).map((d) => `<div class="doc" data-id="${d.id}"><div class="t">📄 ${esc(d.title)}</div>
+    let h = list.slice(0, 150).map((d) => `<div class="doc" data-id="${d.id}"><div class="t">${VO.icon('file')} ${esc(d.title)}</div>
       <div class="meta"><span class="kind ${d.kind}">${KIND[d.kind] || d.kind}</span><span>${esc(d.author)}</span><span>· ${fmtTime(d.t)}</span><span>· ${d.content.length < 1000 ? d.content.length : Math.round(d.content.length / 100) / 10 + 'k'} karakter</span></div></div>`).join('');
-    if (!h) h = q ? `<p class="empty">Tidak ada dokumen cocok.</p>` : `<p class="empty">Gudang dokumen masih kosong. Laporan tugas yang selesai tersimpan di sini otomatis, dan kamu bisa <b>⬆ Unggah</b> file .txt/.md sebagai pengetahuan — agen akan membacanya bila relevan dengan tugas.</p>`;
+    if (!h) h = q ? `<p class="empty">Tidak ada dokumen cocok.</p>` : `<p class="empty">Gudang dokumen masih kosong. Laporan tugas yang selesai tersimpan di sini otomatis, dan kamu bisa <b>Unggah</b> file .txt/.md sebagai pengetahuan — agen akan membacanya bila relevan dengan tugas.</p>`;
     const el = $('docList');
     if (el._html !== h) { el.innerHTML = h; el._html = h; }
     $('docCount').textContent = s.docs.length;
@@ -419,9 +429,9 @@
   ui.showDoc = function (id) {
     const d = S().docs.find((x) => x.id === id);
     if (!d) return;
-    $('resultTitle').textContent = '📄 ' + d.title;
+    $('resultTitle').textContent = d.title;
     $('resultBody').innerHTML = `<div style="color:var(--muted)">${KIND[d.kind] || d.kind} · ${esc(d.author)} · ${new Date(d.t).toLocaleString('id-ID')}</div>
-      <div class="btns" style="margin:8px 0"><button type="button" class="small" data-doc="download" data-id="${d.id}">⬇ Unduh .md</button><button type="button" class="small danger" data-doc="delete" data-id="${d.id}">🗑 Hapus</button></div>
+      <div class="btns" style="margin:8px 0"><button type="button" class="small" data-doc="download" data-id="${d.id}">${VO.icon('download')} Unduh .md</button><button type="button" class="small danger" data-doc="delete" data-id="${d.id}">${VO.icon('trash')} Hapus</button></div>
       <div>${ui.md(d.content)}</div>`;
     $('resultDlg').showModal();
   };
@@ -433,12 +443,12 @@
     $('docFile').addEventListener('change', async (e) => {
       let n = 0;
       for (const f of e.target.files) {
-        if (f.size > 500_000) { ui.toast('⚠️ ' + f.name + ' terlalu besar (maks 500 KB)'); continue; }
-        VO.addDoc(S(), { kind: 'upload', title: f.name, author: 'Boss (unggahan)', content: await f.text() });
+        if (f.size > 500_000) { ui.toast(f.name + ' terlalu besar (maks 500 KB)', 'alert'); continue; }
+        VO.addDoc(S(), { kind: 'upload', title: f.name, author: (S().boss.name || 'Boss') + ' (unggahan)', content: await f.text() });
         n++;
       }
       e.target.value = '';
-      if (n) { VO.log(S(), `📚 ${n} dokumen diunggah ke Gudang Dokumen`); VO.app.changed(); ui.renderDocs(); ui.toast(`📚 ${n} dokumen tersimpan`); }
+      if (n) { VO.log(S(), `${n} dokumen diunggah ke Gudang Dokumen`, 'book'); VO.app.changed(); ui.renderDocs(); ui.toast(`${n} dokumen tersimpan`, 'book'); }
     });
     $('resultBody').addEventListener('click', (e) => {
       const b = e.target.closest('[data-doc]');
@@ -474,12 +484,12 @@
     const s = S();
     const t = s.tasks.find((x) => x.id === id);
     if (!t) return;
-    $('resultTitle').textContent = '📋 ' + t.title;
+    $('resultTitle').textContent = t.title;
     let h = `<div><b>Status:</b> ${ST_TXT[t.status] || t.status} · <b>Target:</b> ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))} · <b>Mode:</b> ${t.ai ? 'AI (' + esc(VO.ai.label()) + ')' : 'Simulasi'}</div>`;
     if (t.note) h += `<div style="color:#ef9a9a">${esc(t.note)}</div>`;
-    if (t.result) h += `<h4>🧾 Laporan akhir</h4><div>${ui.md(t.result)}</div>`;
-    h += `<h4>👥 Hasil per agen</h4>`;
-    for (const st of t.subtasks) h += `<div class="sub"><b>${esc(st.agentName)}</b> <span style="color:var(--muted)">(${esc(st.role)}) · ${esc(st.status)} ${Math.round((st.progress || 0) * 100)}%</span>\n${st.refs && st.refs.length ? `<span style="color:var(--muted)">📚 Referensi: ${st.refs.map(esc).join(', ')}</span>\n` : ''}${st.wait ? esc(st.wait) + '\n' : ''}${ui.md(st.output || '…')}</div>`;
+    if (t.result) h += `<h4>${VO.icon('file')} Laporan akhir</h4><div>${ui.md(t.result)}</div>`;
+    h += `<h4>${VO.icon('users')} Hasil per agen</h4>`;
+    for (const st of t.subtasks) h += `<div class="sub"><b>${esc(st.agentName)}</b> <span style="color:var(--muted)">(${esc(st.role)}) · ${esc(st.status)} ${Math.round((st.progress || 0) * 100)}%</span>\n${st.refs && st.refs.length ? `<span style="color:var(--muted)">Referensi: ${st.refs.map(esc).join(', ')}</span>\n` : ''}${st.wait ? esc(st.wait) + '\n' : ''}${ui.md(st.output || '…')}</div>`;
     $('resultBody').innerHTML = h;
     $('resultDlg').showModal();
   };

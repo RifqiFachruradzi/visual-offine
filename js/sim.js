@@ -168,10 +168,12 @@
     });
   };
 
-  sim.say = function (id, text, sec = 3) {
+  // Balon chat di atas kepala. icon = nama ikon dari icons.js (opsional).
+  sim.say = function (id, text, sec = 3, icon = null) {
     const rt = sim.rt.get(id);
-    if (rt) rt.bubble = { text, until: performance.now() + sec * 1000 };
+    if (rt) rt.bubble = { text, icon, until: performance.now() + sec * 1000 };
   };
+  sim.STATUS_ICON = { working: 'monitor', coffee: 'coffee', meeting: 'meeting', briefing: 'task', reporting: 'inbox', chat: 'chat', break: 'leaf' };
 
   sim.isBusy = (id) => {
     const rt = sim.rt.get(id);
@@ -246,7 +248,7 @@
       case 'sit': rt.sitting = true; rt.status = 'idle'; done = true; break;
       case 'wait': {
         if (a.status) rt.status = a.status;
-        if (a.bubble && !a.said) { sim.say(rt.id, a.bubble, Math.min(a.t, 6)); a.said = true; }
+        if (a.bubble && !a.said) { sim.say(rt.id, a.bubble, Math.min(a.t, 6), sim.STATUS_ICON[a.status]); a.said = true; }
         a.t -= dt;
         done = a.t <= 0;
         break;
@@ -301,7 +303,7 @@
     const home = sim.homeActions(s, rt.id);
     if (r < 0.3) {
       const spot = VO.pick(sim.spots(s, 'pantry'));
-      if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(3, 6), 'coffee', VO.pick(['☕ Ngopi dulu', '🍩 Snack time', '☕ Refill kafein'])), ...home], { ambient: true });
+      if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(3, 6), 'coffee', VO.pick(['Ngopi dulu', 'Snack time', 'Refill kafein'])), ...home], { ambient: true });
     } else if (r < 0.48 && rt.id !== 'boss') {
       // ngobrol dengan rekan satu departemen yang sedang di mejanya
       const mates = s.agents.filter((x) => x.id !== rt.id && x.deptId && x.deptId === e.deptId && !sim.isBusy(x.id));
@@ -311,8 +313,8 @@
         const t = tileOf(mrt);
         sim.act(rt.id, [
           A.goto({ x: t.x + 1, y: t.y }, 'walking'),
-          A.fn(() => sim.say(m.id, VO.pick(['😄 Haha iya', '🤔 Masuk akal', '👍 Setuju', '💡 Ide bagus!']), 3)),
-          A.wait(3, 'chat', VO.pick(['💬 Eh, udah liat PR baru?', '💬 Prompt-mu keren', '💬 Token kita cukup?', '💬 Makan siang di mana?'])),
+          A.fn(() => sim.say(m.id, VO.pick(['Haha iya', 'Masuk akal', 'Setuju', 'Ide bagus!']), 3, 'chat')),
+          A.wait(3, 'chat', VO.pick(['Eh, udah liat PR baru?', 'Prompt-mu keren', 'Token kita cukup?', 'Makan siang di mana?'])),
           ...home,
         ], { ambient: true });
       }
@@ -320,11 +322,11 @@
       const items = s.furniture.filter((f) => ['cooler', 'bookshelf', 'whiteboard', 'arcade', 'printer'].includes(f.type));
       const f = items.length && VO.pick(items);
       if (f) {
-        const label = { cooler: '💧 Minum', bookshelf: '📖 Baca docs', whiteboard: '🧠 Brainstorm', arcade: '🎮 Main sebentar', printer: '🖨️ Print laporan' }[f.type];
+        const label = { cooler: 'Minum', bookshelf: 'Baca docs', whiteboard: 'Brainstorm', arcade: 'Main sebentar', printer: 'Print laporan' }[f.type];
         sim.act(rt.id, [A.goto({ x: f.x, y: f.y + 1 }, 'walking'), A.wait(VO.rand(2, 4), 'break', label), ...home], { ambient: true });
       }
     } else if (r < 0.7) {
-      sim.say(rt.id, VO.pick(['🤖 Memproses...', '📊 Cek metrik', '🧪 Menjalankan tes', '✨ Optimasi prompt']), 3);
+      sim.say(rt.id, VO.pick(['Memproses...', 'Cek metrik', 'Menjalankan tes', 'Optimasi prompt']), 3, 'sparkles');
     }
   }
 })();

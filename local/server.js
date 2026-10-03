@@ -18,6 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { status, handleRun } from '../lib/llm.js';
+import { gate, authConfig } from '../lib/auth.js';
+import { handleLogin, handleLogout, handleMe } from '../lib/session-http.js';
 
 // folder root proyek (file ini ada di local/)
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,15 +58,26 @@ setInterval(() => { for (const res of listeners) res.write(': ping\n\n'); }, 25_
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
-    if (url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, ...status(), live: true, host: 'local', listeners: listeners.size });
-    }
-    if (url.pathname === '/api/run' && req.method === 'POST') return handleRun(req, res);
+    // hook Claude Code mengirim event tanpa cookie (server hanya mendengar 127.0.0.1)
     if (url.pathname === '/api/event' && req.method === 'POST') {
       const ev = JSON.parse((await readBody(req)) || '{}');
       broadcast(ev);
       return json(res, 200, { ok: true, delivered: listeners.size });
     }
+    // login: sama seperti middleware Vercel
+    const g = await gate(url.pathname === '/' ? '/index.html' : url.pathname, req.headers.cookie);
+    if (!g.ok) {
+      if (g.api) return json(res, 401, { error: 'Belum login' });
+      res.writeHead(302, { location: '/login.html' });
+      return res.end();
+    }
+    if (url.pathname === '/api/login') return handleLogin(req, res);
+    if (url.pathname === '/api/logout') return handleLogout(req, res);
+    if (url.pathname === '/api/me') return handleMe(req, res);
+    if (url.pathname === '/api/health') {
+      return json(res, 200, { ok: true, ...status(), live: true, host: 'local', listeners: listeners.size });
+    }
+    if (url.pathname === '/api/run' && req.method === 'POST') return handleRun(req, res);
     if (url.pathname === '/api/events') {
       sse(res);
       res.write(': connected\n\n');
@@ -76,7 +89,7 @@ const server = http.createServer(async (req, res) => {
     // file statis
     const rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
     const file = path.normalize(path.join(here, rel));
-    if (!file.startsWith(here + path.sep) || rel.includes('node_modules') || rel.includes('/.git')) return json(res, 403, { error: 'forbidden' });
+    if (!file.startsWith(here + path.sep) || rel.includes('node_modules') || rel.includes('/.git') || rel.startsWith('/local/') || rel.startsWith('/lib/') || rel.startsWith('/.env')) return json(res, 403, { error: 'forbidden' });
     fs.readFile(file, (err, data) => {
       if (err) return json(res, 404, { error: 'not found' });
       res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
@@ -88,8 +101,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n🏢 Visual Office berjalan di http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+  console.log(`\nVisual Office berjalan di http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   const st = status();
-  console.log(`   Mode AI   : ${st.ai ? '✅ ' : '⚪ '}${st.reason}`);
+  const auth = authConfig();
+  console.log(`   Mode AI   : ${st.ai ? '[aktif] ' : '[mati]  '}${st.reason}`);
+  console.log(`   Login     : ${auth.configured ? '[aktif] ' + auth.users.size + ' akun' : '[mati]  set APP_USERNAME & APP_PASSWORD di .env untuk mengunci'}`);
   console.log(`   Live hook : POST http://localhost:${PORT}/api/event  (lihat README.md)\n`);
 });

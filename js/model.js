@@ -6,7 +6,7 @@
   const VO = (window.VO = window.VO || {});
 
   VO.TILE = 32;
-  VO.STORAGE_KEY = 'visual-office:v1';
+  VO.STORAGE_KEY = 'visual-office:v2';
 
   VO.uid = (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 9);
   VO.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -32,14 +32,14 @@
   ];
 
   VO.FURNITURE = {
-    plant: { label: 'Tanaman', icon: '🪴' },
-    sofa: { label: 'Sofa', icon: '🛋️' },
-    bookshelf: { label: 'Rak Buku', icon: '📚' },
-    whiteboard: { label: 'Whiteboard', icon: '📋' },
-    cooler: { label: 'Dispenser', icon: '🚰' },
-    printer: { label: 'Printer', icon: '🖨️' },
-    server: { label: 'Server Rack', icon: '🗄️' },
-    arcade: { label: 'Arcade', icon: '🕹️' },
+    plant: { label: 'Tanaman', icon: 'plant' },
+    sofa: { label: 'Sofa', icon: 'sofa' },
+    bookshelf: { label: 'Rak Buku', icon: 'book' },
+    whiteboard: { label: 'Whiteboard', icon: 'board' },
+    cooler: { label: 'Dispenser', icon: 'droplet' },
+    printer: { label: 'Printer', icon: 'printer' },
+    server: { label: 'Server Rack', icon: 'server' },
+    arcade: { label: 'Arcade', icon: 'gamepad' },
   };
 
   VO.FACILITY_TYPES = {
@@ -77,13 +77,24 @@
   });
 
   /* ---------------------------------------------------------------- default */
-  VO.defaultState = function () {
+  // Kantor kosong: hanya ruang Boss, ruang rapat, dan pantry — siap untuk demo dari nol.
+  VO.emptyState = function () {
+    const s = VO.baseState();
+    VO.autoLayout(s);
+    s.furniture.push({ id: VO.uid('fu'), type: 'plant', x: 1, y: 1 });
+    VO.log(s, 'Kantor baru siap. Tambahkan divisi pertamamu!', 'building');
+    return s;
+  };
+  VO.defaultState = VO.emptyState;
+
+  VO.baseState = function () {
     const s = {
       version: 1,
-      company: { name: 'Nusantara AI Corp' },
+      company: { name: 'Kantor AI Saya' },
       settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true },
       map: { w: 64, h: 44 },
-      boss: VO.makeAgent({ id: 'boss', name: 'Pak Bos', role: 'CEO', model: VO.DEFAULT_MODEL, shirt: '#1f2430', hair: '#1c1c1c', prompt: 'Kamu CEO perusahaan. Tegas, strategis, fokus pada hasil.' }),
+      // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
+      boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, shirt: '#1f2430', hair: '#1c1c1c' }),
       facilities: [],
       divisions: [],
       departments: [],
@@ -94,6 +105,13 @@
       log: [],
     };
     for (const t of ['boss', 'meeting', 'pantry']) VO.addFacility(s, t);
+    return s;
+  };
+
+  // Kantor contoh lengkap (tombol "Contoh")
+  VO.sampleState = function (keep) {
+    const s = VO.baseState();
+    if (keep) { s.boss = keep.boss; s.company = keep.company; s.docs = keep.docs || []; s.settings = { ...s.settings, ...keep.settings }; }
 
     const org = [
       ['Teknologi', '#4f8cff', 'CTO', [
@@ -120,7 +138,7 @@
     const deco = [['plant', 1, 1], ['plant', 36, 1], ['cooler', 37, 5], ['printer', 37, 7], ['bookshelf', 38, 2], ['sofa', 40, 2], ['arcade', 42, 2], ['plant', 44, 2]];
     for (const [type, x, y] of deco) s.furniture.push({ id: VO.uid('fu'), type, x, y });
     VO.autoLayout(s);
-    VO.log(s, '🏢 Kantor dibuat. Selamat datang, Boss!');
+    VO.log(s, 'Kantor contoh dimuat: 3 divisi, 6 departemen.', 'building');
     return s;
   };
 
@@ -180,8 +198,8 @@
     s.agents = s.agents.filter((a) => a.id !== id);
   };
 
-  VO.log = function (s, text) {
-    s.log.unshift({ t: Date.now(), text });
+  VO.log = function (s, text, icon = 'activity') {
+    s.log.unshift({ t: Date.now(), text, icon });
     if (s.log.length > 200) s.log.length = 200;
   };
 
