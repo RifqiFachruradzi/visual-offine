@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visual Office · Kantor Agent AI</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🏢</span>
+      <input id="companyName" class="company" title="Klik untuk mengganti nama perusahaan" />
+    </div>
+    <div class="modes" role="tablist">
+      <button id="modeView" class="mode active" title="Mode lihat (V)">👁 Lihat</button>
+      <button id="modeEdit" class="mode" title="Mode edit layout (E)">✏️ Edit Layout</button>
+    </div>
+    <div class="toolbar">
+      <label class="toggle" title="Karyawan bergerak sendiri (ngopi, ngobrol, dll.)"><input type="checkbox" id="ambient" /> Aktivitas otomatis</label>
+      <label class="toggle" title="Gunakan Claude API sungguhan untuk mengerjakan tugas"><input type="checkbox" id="aiMode" /> Mode AI nyata</label>
+      <span id="aiStatus" class="pill">…</span>
+      <select id="speed" title="Kecepatan simulasi">
+        <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+      </select>
+      <button id="btnFit" title="Tampilkan seluruh kantor (F)">⤢</button>
+      <button id="btnExport" title="Simpan ke file JSON">💾 Export</button>
+      <button id="btnImport" title="Muat dari file JSON">📂 Import</button>
+      <button id="btnReset" class="danger" title="Kembalikan ke kantor contoh">↺ Reset</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel left">
+      <div class="panel-head">
+        <h2>Struktur Organisasi</h2>
+        <button id="addDivision" class="small primary">+ Divisi</button>
+      </div>
+      <div id="orgTree" class="tree"></div>
+      <div class="stats" id="stats"></div>
+    </aside>
+
+    <section class="stage">
+      <canvas id="office"></canvas>
+      <div id="editBar" class="editbar hidden">
+        <div class="group">
+          <span class="lbl">Alat:</span>
+          <button data-tool="move" class="tool active" title="Geser & ubah ukuran ruangan / zona">✋ Pindah</button>
+          <button data-tool="erase" class="tool" title="Hapus furnitur">🧽 Hapus</button>
+        </div>
+        <div class="group" id="furniturePalette"><span class="lbl">Furnitur:</span></div>
+        <div class="group">
+          <span class="lbl">Ruang:</span>
+          <button data-fac="meeting" class="small">+ Rapat</button>
+          <button data-fac="pantry" class="small">+ Pantry</button>
+          <button data-fac="lounge" class="small">+ Lounge</button>
+        </div>
+        <div class="group">
+          <span class="lbl">Lantai:</span>
+          <select id="floorSel"></select>
+          <span class="lbl">Peta:</span>
+          <input type="number" id="mapW" min="30" max="160" title="Lebar (tile)" />×<input type="number" id="mapH" min="20" max="120" title="Tinggi (tile)" />
+          <button id="btnAuto" class="small primary" title="Susun ulang semua ruangan otomatis">🪄 Tata Otomatis</button>
+        </div>
+      </div>
+      <div class="hint" id="hint">Scroll = zoom · Drag = geser kamera · Klik karyawan untuk detail</div>
+    </section>
+
+    <aside class="panel right">
+      <section class="card" id="inspector"></section>
+      <section class="card">
+        <h3>📋 Perintah Boss</h3>
+        <form id="taskForm" class="task-form">
+          <textarea id="taskTitle" rows="2" placeholder="Contoh: Buat rencana peluncuran produk AI baru" required></textarea>
+          <div class="row">
+            <select id="taskTarget"></select>
+            <button type="submit" class="primary">Kirim</button>
+          </div>
+        </form>
+      </section>
+      <section class="card grow">
+        <div class="tabs">
+          <button class="tab active" data-tab="tasks">Tugas</button>
+          <button class="tab" data-tab="log">Aktivitas</button>
+        </div>
+        <div id="taskList" class="list"></div>
+        <div id="logList" class="list hidden"></div>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlgForm">
+      <h3 id="dlgTitle"></h3>
+      <div id="dlgBody"></div>
+      <menu>
+        <button value="cancel" formnovalidate>Batal</button>
+        <button value="ok" class="primary" id="dlgOk">Simpan</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="resultDlg" class="wide">
+    <form method="dialog">
+      <h3 id="resultTitle"></h3>
+      <div id="resultBody" class="result"></div>
+      <menu><button value="ok" class="primary">Tutup</button></menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/model.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/tasks.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
