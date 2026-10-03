@@ -195,11 +195,11 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
-  const THEMES = ['robot', 'modern', 'pixel'];
-  const THEME_LABEL = { robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
-  const THEME_ICON = { robot: 'bot', modern: 'sun', pixel: 'moon' };
+  const THEMES = ['classic', 'robot', 'modern', 'pixel'];
+  const THEME_LABEL = { classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
+  const THEME_ICON = { classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
   function applyTheme() {
-    const t = app.state.settings.theme || 'robot';
+    const t = app.state.settings.theme || 'classic';
     document.body.classList.toggle('light', t !== 'pixel');
     const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
     const b = $('btnTheme');
@@ -250,7 +250,7 @@
     $('btnFit').onclick = () => R.fit($('office'), s());
     $('btnTheme').onclick = () => {
       const st = s().settings;
-      st.theme = THEMES[(THEMES.indexOf(st.theme || 'robot') + 1) % THEMES.length];
+      st.theme = THEMES[(THEMES.indexOf(st.theme || 'classic') + 1) % THEMES.length];
       applyTheme();
       R.staticDirty = true;
       app.changed();

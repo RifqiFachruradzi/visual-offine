@@ -119,7 +119,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'classic', themeV3: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -396,6 +396,7 @@
     if (!s || typeof s !== 'object' || !s.boss || !Array.isArray(s.agents)) throw new Error('Format file tidak dikenali');
     const d = VO.defaultState();
     const needV2 = !(s.settings && s.settings.modelsV2);
+    const needV3 = !(s.settings && s.settings.themeV3);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -405,6 +406,8 @@
       s.settings.modelsV2 = true;
     }
     for (const a of [s.boss, ...s.agents]) { if (!Array.isArray(a.memory)) a.memory = []; VO.ensureLook(a); }
+    // v3: tampilan default berganti ke Kantor Klasik (tema lain tetap bisa dipilih)
+    if (needV3) { s.settings.theme = 'classic'; s.settings.themeV3 = true; }
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');

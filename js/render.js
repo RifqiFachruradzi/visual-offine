@@ -18,9 +18,14 @@
   // Tema: 'modern' (terang, kantor terbuka — default) atau 'pixel' (gelap, gaya Habbo)
   // Tema: 'robot' (default — karakter robot, pulau kerja putih, aksen biru kobalt),
   // 'modern' (kantor terbuka terang, karakter manusia) atau 'pixel' (gelap, gaya Habbo)
-  const theme = () => (VO.app && VO.app.state && VO.app.state.settings.theme) || 'robot';
-  const modern = () => theme() !== 'pixel'; // tema terang (robot & modern)
+  const theme = () => (VO.app && VO.app.state && VO.app.state.settings.theme) || 'classic';
+  const modern = () => theme() === 'robot' || theme() === 'modern'; // kantor terbuka terang
   const robot = () => theme() === 'robot';
+  // 'classic' = kantor pixel isometrik klasik: lantai ubin lavender, dinding abu berjendela,
+  // meja krem berlaci, kursi biru, sekat kubikel kaca, sofa biru di karpet hijau
+  const classic = () => theme() === 'classic';
+  R.isClassic = classic;
+  const CL = { floorA: '#b9bde8', floorB: '#b3b7e3', wallL: '#eceef4', wallR: '#d7dae6', wallTop: '#bcc0d2', desk: '#efe6cf', chair: '#3d5fd6', chairBack: '#2f4fc4', glass: 'rgba(175,205,255,0.42)', frame: '#4a66cf' };
   R.isModern = modern;
   R.theme = theme;
   const NAVY = '#2633c9', CORAL = '#f04e5e', ORANGE = '#f28a30';
@@ -119,7 +124,8 @@
     const ctx = floorCanvas.getContext('2d');
     const M = modern();
     const RB = robot();
-    const fl = RB ? { a: '#e9ebf4', b: '#e9ebf4' } : M ? { a: '#eef0f4', b: '#eceef3' } : VO.FLOORS[s.settings.floor] || VO.FLOORS.wood;
+    const CLS = classic();
+    const fl = RB ? { a: '#e9ebf4', b: '#e9ebf4' } : M ? { a: '#eef0f4', b: '#eceef3' } : CLS ? { a: CL.floorA, b: CL.floorB } : VO.FLOORS[s.settings.floor] || VO.FLOORS.wood;
 
     // tepi platform (tebal) agar lantai terlihat seperti blok 3D
     const depth = 14;
@@ -135,13 +141,14 @@
     for (const d of s.departments) {
       if (RB) break;
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      setRect(d.room, M ? mix('#f7f8fb', div ? div.color : '#888888', 0.04) : mix('#e9edf2', div ? div.color : '#888888', 0.16));
+      setRect(d.room, CLS ? '#c3c6ee' : M ? mix('#f7f8fb', div ? div.color : '#888888', 0.04) : mix('#e9edf2', div ? div.color : '#888888', 0.16));
     }
     for (const f of s.facilities) {
       if (RB) break;
-      setRect(f, M ? mix('#f7f8fb', f.color, 0.05) : mix('#ece6dc', f.color, 0.2));
-      if (f.type === 'boss') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 3 }, M ? '#e4e8f0' : '#9c3b45');
-      if (f.type === 'lounge') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 4 }, mix(M ? '#f7f8fb' : '#ece6dc', '#9d4edd', M ? 0.12 : 0.45));
+      setRect(f, CLS ? '#c3c6ee' : M ? mix('#f7f8fb', f.color, 0.05) : mix('#ece6dc', f.color, 0.2));
+      if (f.type === 'boss') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 3 }, CLS ? '#5b6fd0' : M ? '#e4e8f0' : '#9c3b45');
+      if (f.type === 'lounge') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 4 }, CLS ? '#3f9d4b' : mix(M ? '#f7f8fb' : '#ece6dc', '#9d4edd', M ? 0.12 : 0.45));
+      if (CLS && f.type === 'pantry') setRect({ x: f.x + 1, y: f.y + 2, w: f.w - 2, h: f.h - 3 }, '#d9dcf3');
     }
 
     for (let y = 0; y < s.map.h; y++)
@@ -218,14 +225,31 @@
       if (modern()) return partitions(r, fac);
       const doors = VO.doorTiles(r, fac);
       const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
-      const wallBase = mix('#efe9df', color, 0.18);
-      const TALL = 46, LOW = 12, TH_ = 0.32; // tinggi dinding belakang/depan & ketebalan
+      const CLS = classic();
+      const wallBase = CLS ? CL.wallL : mix('#efe9df', color, 0.18);
+      const TALL = CLS ? 52 : 46, LOW = CLS ? 26 : 12, TH_ = CLS ? 0.22 : 0.32; // tinggi dinding belakang/depan & ketebalan
       const L = r.x, Tp = r.y, Rr = r.x + r.w - 1, B = r.y + r.h - 1;
       const seg = (x0, y0, x1, y1, h, kind, win) =>
         add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
-          const f = box(ctx, x0, y0, x1, y1, 0, h, { top: '#5a6172', left: shade(wallBase, 0.95), right: shade(wallBase, 0.78) });
-          if (win && kind === 'top') facePanel(ctx, f.fL, 0.18, 0.82, 0.38, 0.8, 'rgba(150,205,255,0.75)');
-          if (win && kind === 'left') facePanel(ctx, f.fR, 0.18, 0.82, 0.38, 0.8, 'rgba(150,205,255,0.75)');
+          if (CLS && h === LOW) { // sekat kubikel kaca berbingkai biru
+            const g = box(ctx, x0, y0, x1, y1, 0, h, { top: CL.frame, left: CL.glass, right: 'rgba(150,185,245,0.42)' }, { outline: false });
+            ctx.strokeStyle = CL.frame; ctx.lineWidth = 1.4;
+            for (const f2 of [g.fL, g.fR]) { ctx.beginPath(); ctx.moveTo(f2[3].x, f2[3].y); ctx.lineTo(f2[2].x, f2[2].y); ctx.stroke(); }
+            ctx.lineWidth = 1;
+            return;
+          }
+          const f = box(ctx, x0, y0, x1, y1, 0, h, CLS ? { top: CL.wallTop, left: CL.wallL, right: CL.wallR } : { top: '#5a6172', left: shade(wallBase, 0.95), right: shade(wallBase, 0.78) });
+          const winCol = CLS ? '#8fc4f5' : 'rgba(150,205,255,0.75)';
+          const face = kind === 'top' ? f.fL : kind === 'left' ? f.fR : null;
+          if (win && face) {
+            if (CLS) facePanel(ctx, face, 0.12, 0.88, 0.36, 0.86, '#ffffff'); // bingkai jendela
+            facePanel(ctx, face, 0.18, 0.82, 0.4, 0.82, winCol);
+            if (CLS) facePanel(ctx, face, 0.48, 0.52, 0.4, 0.82, '#ffffff');
+          } else if (CLS && face && ((x0 * 7 + y0 * 13) | 0) % 5 === 0) {
+            // poster / papan pengumuman di dinding
+            facePanel(ctx, face, 0.3, 0.7, 0.45, 0.82, '#ffffff');
+            facePanel(ctx, face, 0.36, 0.64, 0.52, 0.75, ['#6aa9ff', '#ffb74d', '#81c784', '#f06292'][((x0 + y0) | 0) % 4]);
+          }
           if (h > LOW) { // list warna di kaki dinding
             if (kind === 'top') facePanel(ctx, f.fL, 0, 1, 0, 0.12, shade(color, 0.85));
             if (kind === 'left') facePanel(ctx, f.fR, 0, 1, 0, 0.12, shade(color, 0.75));
@@ -308,7 +332,7 @@
       const dx = seat.desk.x, dy = seat.desk.y;
       for (let i = -1; i <= 1; i++)
         add(dx + i + dy + 1, (ctx) => {
-          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
+          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
           facePanel(ctx, b.fL, 0, 1, 0.82, 0.9, '#d4a843');
           if (i === 0) { // dokumen & pena di atas meja
             poly(ctx, diamond(dx + 0.3, dy + 0.3, 0.35, 0.3, 17), '#f5f5f5');
@@ -321,8 +345,8 @@
       // kursi boss (sandaran di belakang, boss menghadap ke depan)
       add(seat.chair.x + seat.chair.y + 0.8, (ctx) => {
         const cx = seat.chair.x, cy = seat.chair.y;
-        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : '#3b2418');
-        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : '#5a3826');
+        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : classic() ? CL.chairBack : '#3b2418');
+        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : '#5a3826');
       });
       add(f.x + 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 }));
       add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
@@ -332,10 +356,10 @@
         for (let x = t.x; x < t.x + t.w; x++)
           add(x + y + 1, (ctx) => {
             box(ctx, x - (x === t.x ? -0.1 : 0), y - (y === t.y ? -0.1 : 0), x + 1 - (x === t.x + t.w - 1 ? 0.1 : 0), y + 1 - (y === t.y + t.h - 1 ? 0.1 : 0), 0, 14,
-              robot() ? { top: '#ffffff', left: '#dfe2f0', right: '#c9cee3' } : { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
+              robot() ? { top: '#ffffff', left: '#dfe2f0', right: '#c9cee3' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
           });
       for (const p of VO.sim.spots(s, 'meeting'))
-        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, robot() ? NAVY : '#3a3f4b'));
+        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, robot() ? NAVY : classic() ? CL.chair : '#3a3f4b'));
       // layar presentasi di dinding belakang
       add(f.x + f.w / 2 + f.y + 1.2, (ctx) => {
         const b = box(ctx, f.x + f.w / 2 - 1.5, f.y + 0.95, f.x + f.w / 2 + 1.5, f.y + 1.02, 18, 22, '#22252c');
@@ -369,12 +393,20 @@
     if (modern()) { // meja putih dengan kaki ramping
       box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 12, 3, { top: topColor, left: '#dde1e8', right: '#cdd2db' }, { outline: false });
       for (const [lx, ly] of [[0.1, 0.18], [0.86, 0.18], [0.1, 0.78], [0.86, 0.78]]) box(ctx, x + lx, y + ly, x + lx + 0.04, y + ly + 0.04, 0, 12, '#b8bfcb', { outline: false });
+    } else if (classic()) { // meja krem dengan laci
+      const d = box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 0, 15, { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' });
+      facePanel(ctx, d.fR, 0.08, 0.92, 0.55, 0.85, '#e4dac1');
+      facePanel(ctx, d.fR, 0.08, 0.92, 0.18, 0.48, '#e4dac1');
+      facePanel(ctx, d.fR, 0.42, 0.58, 0.68, 0.74, '#8d8470');
+      facePanel(ctx, d.fR, 0.42, 0.58, 0.31, 0.37, '#8d8470');
+      // tempat sampah kecil di samping meja
+      box(ctx, x + 0.93, y + 0.62, x + 1.05, y + 0.76, 0, 8, '#9aa0b4', { outline: false });
     } else box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 0, 15, { top: topColor, left: shade(topColor, 0.78), right: shade(topColor, 0.62) });
     // monitor menghadap kursi (sisi +ty)
     const rt = ent && VO.sim.rt.get(ent.id);
     const working = rt && rt.working;
     box(ctx, x + 0.46, y + 0.32, x + 0.54, y + 0.42, 15, 5, '#2a2d34'); // kaki monitor
-    const m = box(ctx, x + 0.22, y + 0.3, x + 0.78, y + 0.38, 19, 15, '#1d2129');
+    const m = box(ctx, x + 0.22, y + 0.3, x + 0.78, y + 0.38, 19, 15, classic() ? '#e8e3d3' : '#1d2129');
     let scr = '#20242c';
     if (ent) scr = working ? '#16466e' : '#2d3a4f';
     facePanel(ctx, m.fL, 0.08, 0.92, 0.12, 0.9, scr);
@@ -395,12 +427,12 @@
   }
 
   function drawChair(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
+    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, classic() ? CL.chair : robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
     box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false }); // tiang
   }
   // sandaran digambar SETELAH karyawan yang duduk, agar menutupi punggungnya
   function drawChairBack(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
+    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, classic() ? CL.chairBack : robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
   }
 
   function drawFurniture(ctx, f) {
@@ -420,6 +452,16 @@
           ctx.beginPath(); ctx.ellipse(q.x, q.y - 22, 11, 15, 0, 0, 7); ctx.fill();
           break;
         }
+        if (classic()) { // pohon bonsai bulat dalam pot terakota
+          box(ctx, x + 0.33, y + 0.33, x + 0.67, y + 0.67, 0, 12, '#b5653c');
+          const q = iso(x + 0.5, y + 0.5, 12);
+          ctx.strokeStyle = '#6b4226'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.quadraticCurveTo(q.x + 4, q.y - 12, q.x - 1, q.y - 22); ctx.stroke(); ctx.lineWidth = 1;
+          for (const [ox, oy, r, c] of [[0, -26, 12, '#2f7d32'], [-9, -20, 8, '#357f39'], [9, -21, 8, '#2f7d32'], [-3, -31, 7, '#4caf50'], [4, -24, 5, '#66bb6a']]) {
+            ctx.fillStyle = c; ctx.beginPath(); ctx.arc(q.x + ox, q.y + oy, r, 0, 7); ctx.fill();
+          }
+          break;
+        }
         box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 14, '#8d5a3b');
         const p = iso(x + 0.5, y + 0.5, 14);
         for (const [ox, oy, r, c] of [[0, -10, 10, '#2e7d32'], [-8, -4, 8, '#388e3c'], [8, -5, 8, '#2e7d32'], [0, -20, 8, '#43a047'], [-4, -13, 6, '#66bb6a']]) {
@@ -428,13 +470,20 @@
         break;
       }
       case 'sofa':
+        if (classic()) {
+          box(ctx, x + 0.05, y + 0.2, x + 0.95, y + 0.85, 0, 10, '#3d63d8');
+          box(ctx, x + 0.05, y + 0.12, x + 0.95, y + 0.32, 0, 22, '#2f50c2');
+          box(ctx, x + 0.05, y + 0.2, x + 0.17, y + 0.85, 0, 15, '#2f50c2');
+          box(ctx, x + 0.83, y + 0.2, x + 0.95, y + 0.85, 0, 15, '#2f50c2');
+          break;
+        }
         box(ctx, x + 0.05, y + 0.2, x + 0.95, y + 0.85, 0, 10, '#5c6bc0');
         box(ctx, x + 0.05, y + 0.12, x + 0.95, y + 0.32, 0, 22, '#4a59ad');
         box(ctx, x + 0.05, y + 0.2, x + 0.17, y + 0.85, 0, 16, '#4a59ad');
         box(ctx, x + 0.83, y + 0.2, x + 0.95, y + 0.85, 0, 16, '#4a59ad');
         break;
       case 'bookshelf': {
-        const b = box(ctx, x + 0.08, y + 0.3, x + 0.92, y + 0.7, 0, 44, '#6d4c41');
+        const b = box(ctx, x + 0.08, y + 0.3, x + 0.92, y + 0.7, 0, 46, classic() ? { top: '#4a66cf', left: '#cfe0ff', right: '#9fb6ee' } : '#6d4c41');
         for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++)
           facePanel(ctx, b.fL, 0.08 + i * 0.145, 0.08 + i * 0.145 + 0.11, 0.08 + r * 0.23, 0.08 + r * 0.23 + 0.17, VO.SHIRTS[(r * 6 + i) % VO.SHIRTS.length]);
         break;
@@ -454,6 +503,14 @@
         break;
       }
       case 'printer': {
+        if (classic()) { // mesin fotokopi besar
+          const c = box(ctx, x + 0.08, y + 0.15, x + 0.92, y + 0.85, 0, 24, { top: '#f2f3f6', left: '#dfe2ea', right: '#c9cdd8' });
+          facePanel(ctx, c.fL, 0.1, 0.9, 0.15, 0.45, '#cfd3de');
+          facePanel(ctx, c.fL, 0.1, 0.9, 0.55, 0.62, '#9aa0b2');
+          box(ctx, x + 0.15, y + 0.2, x + 0.7, y + 0.7, 24, 4, '#e3e6ee');
+          poly(ctx, diamond(x + 0.7, y + 0.25, 0.18, 0.2, 24), '#4a66cf');
+          break;
+        }
         const b = box(ctx, x + 0.15, y + 0.2, x + 0.85, y + 0.8, 0, 14, '#cfd8dc');
         facePanel(ctx, b.fL, 0.15, 0.85, 0.35, 0.5, '#37474f');
         poly(ctx, diamond(x + 0.3, y + 0.3, 0.4, 0.35, 15), '#ffffff');
@@ -998,6 +1055,7 @@
     const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
     if (robot()) { g.addColorStop(0, '#f3f4fa'); g.addColorStop(1, '#e3e6f2'); }
     else if (modern()) { g.addColorStop(0, '#f6f8fb'); g.addColorStop(1, '#e4e9f1'); }
+    else if (classic()) { g.addColorStop(0, '#f4f4fb'); g.addColorStop(1, '#e2e3f2'); }
     else { g.addColorStop(0, '#1b1f2a'); g.addColorStop(1, '#12141a'); }
     ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
     const z = R.cam.zoom * dpr;
