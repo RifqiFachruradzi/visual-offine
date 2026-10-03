@@ -195,12 +195,16 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
+  const THEMES = ['robot', 'modern', 'pixel'];
+  const THEME_LABEL = { robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
+  const THEME_ICON = { robot: 'bot', modern: 'sun', pixel: 'moon' };
   function applyTheme() {
-    const m = (app.state.settings.theme || 'modern') === 'modern';
-    document.body.classList.toggle('light', m);
+    const t = app.state.settings.theme || 'robot';
+    document.body.classList.toggle('light', t !== 'pixel');
+    const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
     const b = $('btnTheme');
-    b.innerHTML = VO.icon(m ? 'moon' : 'sun');
-    b.title = m ? 'Ganti ke tampilan Pixel (gelap)' : 'Ganti ke tampilan Modern (terang)';
+    b.innerHTML = VO.icon(THEME_ICON[t]);
+    b.title = `Tampilan: ${THEME_LABEL[t]} — klik untuk ganti ke ${THEME_LABEL[next]}`;
   }
 
   function syncControls() {
@@ -246,11 +250,11 @@
     $('btnFit').onclick = () => R.fit($('office'), s());
     $('btnTheme').onclick = () => {
       const st = s().settings;
-      st.theme = (st.theme || 'modern') === 'modern' ? 'pixel' : 'modern';
+      st.theme = THEMES[(THEMES.indexOf(st.theme || 'robot') + 1) % THEMES.length];
       applyTheme();
       R.staticDirty = true;
       app.changed();
-      VO.ui.toast(st.theme === 'modern' ? 'Tampilan Modern (terang)' : 'Tampilan Pixel (gelap)', st.theme === 'modern' ? 'sun' : 'moon');
+      VO.ui.toast('Tampilan ' + THEME_LABEL[st.theme], THEME_ICON[st.theme]);
     };
     $('btnExport').onclick = () => {
       const blob = new Blob([JSON.stringify(s(), null, 2)], { type: 'application/json' });

@@ -238,6 +238,8 @@
     }
     function finish(st) {
       job.progress = 1; job.done = true;
+      const r0 = sim.rt.get(ent.id);
+      if (r0) r0.activity = null;
       if (st === 'done') VO.remember(VO.findEntity(S(), ent.id), `Tugas "${short(task.title, 60)}": ${String(sub.output).replace(/\s+/g, ' ').slice(0, 300)}`);
       sub.status = st; sub.progress = 1; changed();
       sim.say(ent.id, st === 'done' ? 'Bagianku beres!' : 'Ada kendala', 2.5, st === 'done' ? 'check' : 'alert');
@@ -245,7 +247,11 @@
     const seat = VO.seatOf(s, ent);
     const acts = [];
     if (seat) acts.push(A.goto(seat.chair, 'walking'));
-    acts.push(A.fn(() => sim.say(ent.id, short(ent.role, 24), 2, 'monitor')));
+    acts.push(A.fn(() => {
+      sim.say(ent.id, short(ent.role, 24), 2, 'monitor');
+      const r = sim.rt.get(ent.id);
+      if (r) r.activity = short(task.title, 26); // ditampilkan di chip aktivitas (tema Robot)
+    }));
     acts.push(A.work(job));
     let lastPct = 0;
     const iv = setInterval(() => {

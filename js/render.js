@@ -16,8 +16,14 @@
 
   let floorCanvas = null;
   // Tema: 'modern' (terang, kantor terbuka — default) atau 'pixel' (gelap, gaya Habbo)
-  const modern = () => ((VO.app && VO.app.state && VO.app.state.settings.theme) || 'modern') === 'modern';
+  // Tema: 'robot' (default — karakter robot, pulau kerja putih, aksen biru kobalt),
+  // 'modern' (kantor terbuka terang, karakter manusia) atau 'pixel' (gelap, gaya Habbo)
+  const theme = () => (VO.app && VO.app.state && VO.app.state.settings.theme) || 'robot';
+  const modern = () => theme() !== 'pixel'; // tema terang (robot & modern)
+  const robot = () => theme() === 'robot';
   R.isModern = modern;
+  R.theme = theme;
+  const NAVY = '#2633c9', CORAL = '#f04e5e', ORANGE = '#f28a30';
   let props = [];
   const geo = { OX: 0, OY: 90, W: 0, H: 0 };
 
@@ -112,7 +118,8 @@
     floorCanvas.height = geo.H;
     const ctx = floorCanvas.getContext('2d');
     const M = modern();
-    const fl = M ? { a: '#eef0f4', b: '#eceef3' } : VO.FLOORS[s.settings.floor] || VO.FLOORS.wood;
+    const RB = robot();
+    const fl = RB ? { a: '#e9ebf4', b: '#e9ebf4' } : M ? { a: '#eef0f4', b: '#eceef3' } : VO.FLOORS[s.settings.floor] || VO.FLOORS.wood;
 
     // tepi platform (tebal) agar lantai terlihat seperti blok 3D
     const depth = 14;
@@ -124,12 +131,14 @@
     const setRect = (r, color, inset = 0) => {
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
     };
-    for (const div of s.divisions) setRect(div.zone, mix(fl.a, div.color, M ? 0.05 : 0.22));
+    if (!RB) for (const div of s.divisions) setRect(div.zone, mix(fl.a, div.color, M ? 0.05 : 0.22));
     for (const d of s.departments) {
+      if (RB) break;
       const div = s.divisions.find((x) => x.id === d.divisionId);
       setRect(d.room, M ? mix('#f7f8fb', div ? div.color : '#888888', 0.04) : mix('#e9edf2', div ? div.color : '#888888', 0.16));
     }
     for (const f of s.facilities) {
+      if (RB) break;
       setRect(f, M ? mix('#f7f8fb', f.color, 0.05) : mix('#ece6dc', f.color, 0.2));
       if (f.type === 'boss') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 3 }, M ? '#e4e8f0' : '#9c3b45');
       if (f.type === 'lounge') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 4 }, mix(M ? '#f7f8fb' : '#ece6dc', '#9d4edd', M ? 0.12 : 0.45));
@@ -142,6 +151,30 @@
         const fill = c ? ((x + y) % 2 ? base : shade(base, 0.96)) : base;
         poly(ctx, diamond(x, y), M ? (c || fl.a) : fill, M ? 'rgba(40,50,70,0.035)' : 'rgba(0,0,0,0.06)');
       }
+    if (RB) {
+      // pulau kerja putih yang terangkat untuk tiap departemen & ruangan, zona divisi bertitik
+      const island = (r, inset, h) => {
+        const x0 = r.x + inset, y0 = r.y + inset, x1 = r.x + r.w - inset, y1 = r.y + r.h - inset;
+        const sh = [iso(x0, y0), iso(x1, y0), iso(x1, y1), iso(x0, y1)].map((p) => ({ x: p.x + 6, y: p.y + 10 }));
+        poly(ctx, sh, 'rgba(60,70,140,0.08)');
+        const A2 = iso(x0, y1), B2 = iso(x1, y1), C2 = iso(x1, y0);
+        poly(ctx, [A2, B2, { x: B2.x, y: B2.y + h }, { x: A2.x, y: A2.y + h }], '#dde0ee');
+        poly(ctx, [B2, C2, { x: C2.x, y: C2.y + h }, { x: B2.x, y: B2.y + h }], '#cbd0e4');
+        poly(ctx, diamond(x0, y0, x1 - x0, y1 - y0), '#ffffff');
+      };
+      ctx.lineWidth = 2;
+      ctx.setLineDash([2, 7]);
+      for (const div of s.divisions) poly(ctx, diamond(div.zone.x + 0.15, div.zone.y + 0.15, div.zone.w - 0.3, div.zone.h - 0.3), null, alpha(NAVY, 0.28));
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      for (const f of s.facilities) island(f, 0.25, 8);
+      for (const d of s.departments) island(d.room, 0.25, 8);
+      for (const div of s.divisions) island({ x: div.directorDesk.x - 1, y: div.directorDesk.y - 0.6, w: 3, h: 3 }, 0.1, 6);
+      for (const div of s.divisions) floorText(ctx, div.name.toUpperCase(), div.zone.x + 1, div.zone.y + div.zone.h - 0.7, 22, alpha(NAVY, 0.35));
+      for (const d of s.departments) floorText(ctx, d.name.toUpperCase(), d.room.x + 0.9, d.room.y + d.room.h - 0.6, 12, alpha(NAVY, 0.55));
+      for (const f of s.facilities) floorText(ctx, f.name.toUpperCase(), f.x + 0.9, f.y + f.h - 0.6, 12, alpha(NAVY, 0.5));
+      return;
+    }
     if (M) {
       // garis tipis batas zona & ruangan + nama tim ditulis di lantai (gaya kantor terbuka)
       ctx.lineWidth = 1.5;
@@ -181,6 +214,7 @@
     const add = (k, d) => props.push({ k, d });
 
     const walls = (r, color, fac) => {
+      if (robot()) return; // tema robot: pulau terbuka tanpa dinding
       if (modern()) return partitions(r, fac);
       const doors = VO.doorTiles(r, fac);
       const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
@@ -253,14 +287,14 @@
       walls(d.room, div ? div.color : '#888888', null);
       const members = VO.deptAgents(s, d.id);
       VO.deskSlots(d.room).forEach((sl, i) => {
-        add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#f6f7f9' : '#a47148'));
+        add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#ffffff' : '#a47148'));
         add(sl.chair.x + sl.chair.y + 0.9, (ctx) => drawChair(ctx, sl.chair.x, sl.chair.y));
         add(sl.chair.x + sl.chair.y + 1.3, (ctx) => drawChairBack(ctx, sl.chair.x, sl.chair.y));
       });
     }
     for (const div of s.divisions) {
       const dd = div.directorDesk;
-      add(dd.x + dd.y + 1, (ctx, now) => drawDesk(ctx, dd.x, dd.y, now, VO.director(s, div.id), modern() ? '#ece8f5' : '#6d4c7d'));
+      add(dd.x + dd.y + 1, (ctx, now) => drawDesk(ctx, dd.x, dd.y, now, VO.director(s, div.id), robot() ? '#e6e9fb' : modern() ? '#ece8f5' : '#6d4c7d'));
       add(dd.x + dd.y + 1.9, (ctx) => drawChair(ctx, dd.x, dd.y + 1));
       add(dd.x + dd.y + 2.3, (ctx) => drawChairBack(ctx, dd.x, dd.y + 1));
     }
@@ -274,7 +308,7 @@
       const dx = seat.desk.x, dy = seat.desk.y;
       for (let i = -1; i <= 1; i++)
         add(dx + i + dy + 1, (ctx) => {
-          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
+          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
           facePanel(ctx, b.fL, 0, 1, 0.82, 0.9, '#d4a843');
           if (i === 0) { // dokumen & pena di atas meja
             poly(ctx, diamond(dx + 0.3, dy + 0.3, 0.35, 0.3, 17), '#f5f5f5');
@@ -287,8 +321,8 @@
       // kursi boss (sandaran di belakang, boss menghadap ke depan)
       add(seat.chair.x + seat.chair.y + 0.8, (ctx) => {
         const cx = seat.chair.x, cy = seat.chair.y;
-        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, '#3b2418');
-        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, '#5a3826');
+        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : '#3b2418');
+        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : '#5a3826');
       });
       add(f.x + 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 }));
       add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
@@ -298,10 +332,10 @@
         for (let x = t.x; x < t.x + t.w; x++)
           add(x + y + 1, (ctx) => {
             box(ctx, x - (x === t.x ? -0.1 : 0), y - (y === t.y ? -0.1 : 0), x + 1 - (x === t.x + t.w - 1 ? 0.1 : 0), y + 1 - (y === t.y + t.h - 1 ? 0.1 : 0), 0, 14,
-              { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
+              robot() ? { top: '#ffffff', left: '#dfe2f0', right: '#c9cee3' } : { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
           });
       for (const p of VO.sim.spots(s, 'meeting'))
-        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, '#3a3f4b'));
+        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, robot() ? NAVY : '#3a3f4b'));
       // layar presentasi di dinding belakang
       add(f.x + f.w / 2 + f.y + 1.2, (ctx) => {
         const b = box(ctx, f.x + f.w / 2 - 1.5, f.y + 0.95, f.x + f.w / 2 + 1.5, f.y + 1.02, 18, 22, '#22252c');
@@ -311,7 +345,7 @@
       for (let x = f.x + 1; x < f.x + f.w - 1; x++) {
         const y = f.y + 1;
         add(x + y + 1, (ctx) => {
-          box(ctx, x, y + 0.1, x + 1, y + 0.9, 0, 18, { top: '#d5d9df', left: '#9aa1ad', right: '#858c98' });
+          box(ctx, x, y + 0.1, x + 1, y + 0.9, 0, 18, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : { top: '#d5d9df', left: '#9aa1ad', right: '#858c98' });
           if (x === f.x + 1) { // mesin kopi
             const b = box(ctx, x + 0.25, y + 0.25, x + 0.75, y + 0.65, 18, 16, '#2a2a2e');
             facePanel(ctx, b.fL, 0.3, 0.7, 0.55, 0.75, '#e53935');
@@ -361,12 +395,12 @@
   }
 
   function drawChair(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, modern() ? '#7f8ba0' : '#353a46'); // dudukan
+    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
     box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false }); // tiang
   }
   // sandaran digambar SETELAH karyawan yang duduk, agar menutupi punggungnya
   function drawChairBack(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, modern() ? '#6f7b90' : '#2b2f3a');
+    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
   }
 
   function drawFurniture(ctx, f) {
@@ -376,6 +410,16 @@
     ctx.beginPath(); ctx.ellipse(sh.x, sh.y, 20, 9, 0, 0, 7); ctx.fill();
     switch (f.type) {
       case 'plant': {
+        if (robot()) { // pohon bulat biru dengan pot koral
+          box(ctx, x + 0.36, y + 0.36, x + 0.64, y + 0.64, 0, 10, CORAL, { outline: false });
+          const q = iso(x + 0.5, y + 0.5, 10);
+          ctx.fillStyle = '#5a3a2a'; ctx.fillRect(q.x - 1.5, q.y - 10, 3, 10);
+          const g = ctx.createRadialGradient(q.x - 5, q.y - 26, 2, q.x, q.y - 20, 16);
+          g.addColorStop(0, '#5d6bff'); g.addColorStop(1, NAVY);
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.ellipse(q.x, q.y - 22, 11, 15, 0, 0, 7); ctx.fill();
+          break;
+        }
         box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 14, '#8d5a3b');
         const p = iso(x + 0.5, y + 0.5, 14);
         for (const [ox, oy, r, c] of [[0, -10, 10, '#2e7d32'], [-8, -4, 8, '#388e3c'], [8, -5, 8, '#2e7d32'], [0, -20, 8, '#43a047'], [-4, -13, 6, '#66bb6a']]) {
@@ -581,6 +625,102 @@
     return hy - 11 - lift; // posisi puncak kepala (untuk mahkota/ikon)
   }
 
+  /**
+   * Karakter robot (tema Robot): kepala putih dengan layar wajah, badan putih,
+   * lengan & kaki oranye. Aksesori menyesuaikan jabatan. Kaki di (0,0).
+   */
+  function drawRobot(ctx, a, o) {
+    const role = String(a.role || '').toLowerCase();
+    const accent = a.id === 'boss' ? '#ffca28' : a.top || ORANGE;
+    const limb = a.id === 'boss' ? '#3a3f6b' : ORANGE;
+    const sw = o.moving ? Math.sin(o.phase * 13) : 0;
+    const sit = o.sitting;
+    ctx.save();
+    if (o.mirror) ctx.scale(-1, 1);
+    ctx.fillStyle = 'rgba(40,50,120,0.18)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 13, 5, 0, 0, 7); ctx.fill();
+    const lift = sit ? 7 : Math.abs(sw) * 1.4;
+    ctx.translate(0, -lift);
+
+    // kaki
+    if (!sit) {
+      [[-7, sw], [1.5, -sw]].forEach(([lx, off], i) => {
+        ctx.fillStyle = shade(limb, i ? 0.85 : 1);
+        rr(ctx, lx + 0.5, -17 + off, 5, 10, 2); ctx.fill();
+        ctx.fillStyle = i ? '#e3e5ee' : '#f4f5fa';
+        rr(ctx, lx - 0.5 + off * 1.5, -8, 7.5, 7.5, 2.5); ctx.fill();
+        ctx.fillStyle = '#3a3f55'; ctx.fillRect(lx - 0.5 + off * 1.5, -1.6, 7.5, 1.8);
+      });
+    } else {
+      ctx.fillStyle = limb; rr(ctx, -7, -16, 14, 7, 3); ctx.fill();
+    }
+    ctx.fillStyle = '#3a3f55'; rr(ctx, -8, -20, 16, 5, 2); ctx.fill(); // pinggul
+
+    // badan
+    const bt = -37;
+    ctx.fillStyle = '#f6f7fb'; rr(ctx, -10.5, bt, 21, 18, 6); ctx.fill();
+    ctx.fillStyle = 'rgba(60,70,130,0.12)'; rr(ctx, 4.5, bt + 1.5, 6, 15, 4); ctx.fill();
+    if (!o.back) {
+      ctx.fillStyle = accent; rr(ctx, -5.5, bt + 4, 11, 8, 2.5); ctx.fill(); // panel dada
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(-3.5, bt + 6, 3, 1.6); ctx.fillRect(1, bt + 6, 2.5, 1.6);
+    } else {
+      ctx.fillStyle = '#dfe2ee'; rr(ctx, -6, bt + 3, 12, 11, 3); ctx.fill(); // panel punggung
+    }
+    // lengan
+    const armSw = o.working ? Math.sin(o.now / 80) * 1.6 : sw * 2.6;
+    for (const [x, d] of [[-14, armSw], [9.5, -armSw]]) {
+      ctx.fillStyle = limb; ctx.beginPath(); ctx.arc(x + 2.2, bt + 3, 3.2, 0, 7); ctx.fill(); // bahu
+      rr(ctx, x, bt + 3 + d, 4.5, 13, 2); ctx.fill();
+      ctx.fillStyle = '#f4f5fa'; ctx.beginPath(); ctx.arc(x + 2.2, bt + 17.5 + d, 2.9, 0, 7); ctx.fill();
+      ctx.fillStyle = limb;
+    }
+    ctx.fillStyle = '#3a3f55'; ctx.fillRect(-2.5, bt - 3, 5, 4); // leher
+
+    // kepala
+    const hy = bt - 21; // sisi atas kepala
+    const hg = ctx.createLinearGradient(-12, hy, 12, hy + 20);
+    hg.addColorStop(0, '#ffffff'); hg.addColorStop(1, '#e6e8f2');
+    ctx.fillStyle = hg; rr(ctx, -12, hy, 24, 20, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,50,110,0.12)'; ctx.lineWidth = 1; rr(ctx, -12, hy, 24, 20, 6); ctx.stroke();
+    if (!o.back) {
+      ctx.fillStyle = '#16193a'; rr(ctx, -7.5, hy + 4, 17, 12, 4); ctx.fill(); // layar wajah
+      // mata berkedip (fase acak per robot)
+      let seed = 0; for (const c of String(o.seed || '')) seed = (seed * 31 + c.charCodeAt(0)) % 997;
+      const blink = ((o.now / 1000 + seed) % 4.2) < 0.13;
+      ctx.fillStyle = o.working ? '#7dffb2' : '#8be9ff';
+      if (blink) { ctx.fillRect(-3.5, hy + 10, 4, 1.2); ctx.fillRect(3.5, hy + 10, 4, 1.2); }
+      else { rr(ctx, -3.5, hy + 7, 4, 5.5, 1.2); ctx.fill(); rr(ctx, 3.5, hy + 7, 4, 5.5, 1.2); ctx.fill(); }
+      if (a.glasses) { ctx.strokeStyle = '#8be9ff'; ctx.lineWidth = 0.8; ctx.strokeRect(-4.5, hy + 6, 13, 7.5); }
+    } else {
+      ctx.fillStyle = '#d9dcea'; rr(ctx, -6, hy + 5, 12, 10, 3); ctx.fill();
+    }
+    ctx.fillStyle = '#d4d8e6'; rr(ctx, -13.5, hy + 7, 3, 7, 1.5); ctx.fill(); // telinga
+
+    // aksesori sesuai jabatan
+    let topY = hy;
+    if (/voice|audio|suara|musik|music|call|support|customer|cs\b|telemarket/.test(role)) {
+      ctx.strokeStyle = accent; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, hy + 6, 14, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+      ctx.fillStyle = accent; rr(ctx, -15.5, hy + 4, 5, 10, 2); ctx.fill(); rr(ctx, 10.5, hy + 4, 5, 10, 2); ctx.fill();
+      topY = hy - 9;
+    } else if (/video|film|editor|render|reel|motion|animat/.test(role)) {
+      for (const [x, y] of [[-5, hy - 6], [5, hy - 7]]) {
+        ctx.fillStyle = '#3a3f55'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, 7); ctx.fill();
+        ctx.fillStyle = '#f4f5fa'; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + Math.cos(k * 1.57) * 2.8, y + Math.sin(k * 1.57) * 2.8, 1.1, 0, 7); ctx.fill(); }
+      }
+      topY = hy - 13;
+    } else if (a.id !== 'boss') {
+      ctx.strokeStyle = '#3a3f55'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(0, hy - 6); ctx.stroke();
+      ctx.fillStyle = a.isDirector ? '#9b5de5' : a.isLead ? '#ffca28' : CORAL;
+      ctx.beginPath(); ctx.arc(0, hy - 7.5, 2.6, 0, 7); ctx.fill();
+      topY = hy - 10;
+    }
+    ctx.restore();
+    return topY - lift;
+  }
+  R.drawRobot = drawRobot;
+
   function drawPerson(ctx, s, ent, rt, now) {
     const fx = rt.x / T, fy = rt.y / T;
     const p = iso(fx, fy);
@@ -603,7 +743,8 @@
     ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
     ctx.scale(1.15, 1.15);
     const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
-    const headTop = drawAvatar(ctx, look, { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now });
+    const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id };
+    const headTop = robot() ? drawRobot(ctx, look, opts) : drawAvatar(ctx, look, opts);
     if (ent.id === 'boss') { // mahkota
       ctx.fillStyle = '#ffca28';
       const y = headTop + 2;
@@ -646,6 +787,43 @@
     const icon = rt.liveTool && rt.liveTool !== 'thinking' ? 'tool' : rt.liveTool === 'thinking' ? 'brain' : VO.sim.STATUS_ICON[rt.status];
     const sel0 = R.selected === ent.id, hov0 = R.hover === ent.id;
     let bubbleY = sc.head - 30;
+    if (robot() && (R.cam.zoom >= 0.45 || sel0 || hov0)) {
+      // label pil: titik status · Nama · Jabatan, plus chip aktivitas saat bekerja
+      const name = ent.name;
+      const showRole = R.cam.zoom >= 1.7 || sel0 || hov0;
+      const role = showRole ? (ent.id === 'boss' ? 'Boss (Kamu)' : ent.role || '') : '';
+      ctx.font = 'bold 9.5px Inter, system-ui, sans-serif';
+      const w1 = ctx.measureText(name).width;
+      ctx.font = '9px Inter, system-ui, sans-serif';
+      const w2 = role ? ctx.measureText(' · ' + role).width : 0;
+      const pw = w1 + w2 + 24, ph = 16;
+      const px = sc.x - pw / 2, py = sc.head - ph - 10;
+      ctx.save();
+      ctx.shadowColor = 'rgba(40,50,120,0.16)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#ffffff'; rr(ctx, px, py, pw, ph, 9); ctx.fill();
+      ctx.restore();
+      if (sel0) { ctx.strokeStyle = NAVY; ctx.lineWidth = 1.5; rr(ctx, px, py, pw, ph, 9); ctx.stroke(); ctx.lineWidth = 1; }
+      const busy = rt.working || ['briefing', 'reporting', 'meeting'].includes(rt.status);
+      ctx.fillStyle = busy ? ORANGE : rt.status === 'walking' ? '#9aa3b8' : '#2fb36b';
+      ctx.beginPath(); ctx.arc(px + 9, py + ph / 2, 3.2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#1b2140'; ctx.font = 'bold 9.5px Inter, system-ui, sans-serif'; ctx.fillText(name, px + 16, py + 11.3);
+      if (role) { ctx.fillStyle = '#6b7190'; ctx.font = '9px Inter, system-ui, sans-serif'; ctx.fillText(' · ' + role, px + 16 + w1, py + 11.3); }
+      const chipTxt = rt.liveTool && rt.liveTool !== 'thinking' ? 'Pakai ' + rt.liveTool
+        : rt.working ? (rt.activity || 'Sedang bekerja') + (rt.progress > 0 && rt.progress < 1 ? ` · ${Math.round(rt.progress * 100)}%` : '')
+        : ({ briefing: 'Menerima briefing', reporting: 'Melapor ke atasan', meeting: 'Rapat' })[rt.status];
+      let top = py;
+      if (chipTxt) {
+        ctx.font = 'bold 9px Inter, system-ui, sans-serif';
+        const cw = Math.min(170, ctx.measureText(chipTxt).width) + 14;
+        const cx = sc.x - cw / 2, cy = py + ph + 3;
+        ctx.fillStyle = ORANGE; rr(ctx, cx, cy, cw, 15, 4); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.save(); ctx.beginPath(); ctx.rect(cx + 4, cy, cw - 8, 15); ctx.clip();
+        ctx.fillText(chipTxt, cx + 7, cy + 10.8); ctx.restore();
+      }
+      if (!chipTxt) drawBubble(ctx, rt, sc, top - 26, now); // chip sudah menjelaskan aktivitas
+      return;
+    }
     if (modern() && (R.cam.zoom >= 0.5 || sel0 || hov0)) {
       // kartu nama melayang: nama (tebal) + jabatan
       const name = ent.name, role = ent.id === 'boss' ? 'Boss (Kamu)' : ent.role || '';
@@ -744,7 +922,8 @@
     updateGeo(s);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    if (modern()) { g.addColorStop(0, '#f6f8fb'); g.addColorStop(1, '#e4e9f1'); }
+    if (robot()) { g.addColorStop(0, '#f3f4fa'); g.addColorStop(1, '#e3e6f2'); }
+    else if (modern()) { g.addColorStop(0, '#f6f8fb'); g.addColorStop(1, '#e4e9f1'); }
     else { g.addColorStop(0, '#1b1f2a'); g.addColorStop(1, '#12141a'); }
     ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
     const z = R.cam.zoom * dpr;
@@ -813,14 +992,15 @@
   /* ------------------------------------------------------------ potret (inspector) */
   const portraitCache = new Map();
   R.portrait = function (ent) {
-    const key = [ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss'].join('|');
+    const key = [theme() === 'robot', ent.role, ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss', ent.isLead, ent.isDirector].join('|');
     if (portraitCache.has(key)) return portraitCache.get(key);
     const c = document.createElement('canvas');
     c.width = 88; c.height = 88;
     const ctx = c.getContext('2d');
     ctx.scale(2, 2);
     ctx.translate(22, 70);
-    const top = drawAvatar(ctx, ent, { back: false, mirror: false, moving: false, phase: 0, sitting: false, working: false, now: 0 });
+    const po = { back: false, mirror: false, moving: false, phase: 0, sitting: false, working: false, now: 0, seed: ent.id };
+    const top = theme() === 'robot' ? drawRobot(ctx, ent, po) : drawAvatar(ctx, ent, po);
     if (ent.id === 'boss') poly(ctx, [{ x: -7, y: top + 2 }, { x: -7, y: top - 5 }, { x: -3.5, y: top - 1 }, { x: 0, y: top - 7 }, { x: 3.5, y: top - 1 }, { x: 7, y: top - 5 }, { x: 7, y: top + 2 }], '#ffca28');
     const url = c.toDataURL();
     portraitCache.set(key, url);
