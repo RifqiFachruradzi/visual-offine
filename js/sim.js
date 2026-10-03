@@ -279,6 +279,7 @@
       const tx = (n.x + 0.5) * T, ty = (n.y + 0.5) * T;
       const dx = tx - rt.x, dy = ty - rt.y, d = Math.hypot(dx, dy);
       if (Math.abs(dx) > 0.5) rt.facing = dx > 0 ? 1 : -1;
+      if (d > 0.5) { rt.mdx = dx; rt.mdy = dy; } // arah gerak terakhir (untuk arah hadap isometrik)
       if (d <= budget) { rt.x = tx; rt.y = ty; budget -= d; rt.path.shift(); }
       else { rt.x += (dx / d) * budget; rt.y += (dy / d) * budget; budget = 0; }
     }

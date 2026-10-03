@@ -59,7 +59,34 @@
   const FIRST = ['Andi', 'Budi', 'Citra', 'Dewi', 'Eka', 'Fajar', 'Gita', 'Hadi', 'Indah', 'Joko', 'Kirana', 'Lukman', 'Maya', 'Nanda', 'Oki', 'Putri', 'Rama', 'Sari', 'Tono', 'Umi', 'Vina', 'Wawan', 'Yudi', 'Zahra', 'Bayu', 'Laras', 'Raka', 'Tiara'];
   VO.randomName = () => VO.pick(FIRST) + ' ' + VO.pick(['AI', 'Bot', '-01', '-02', '-X', 'GPT', 'Agent', 'Prime', 'Nova', 'Byte']);
 
-  VO.makeAgent = (o = {}) => ({
+  // Penampilan gaya Habbo: style = suit (jas) | shirt (kemeja) | cardigan (cardigan + rok)
+  VO.STYLES = { suit: 'Jas & dasi', shirt: 'Kemeja & dasi', cardigan: 'Cardigan & rok' };
+  VO.HAIR_STYLES = ['Pendek', 'Belah samping', 'Panjang', 'Cepol', 'Botak', 'Ikal'];
+  VO.PANTS = ['#2b3a67', '#3b3f4a', '#5b4a3a', '#2d2d33', '#4a5568', '#c2b49a'];
+  VO.TIES = ['#7b1fa2', '#c62828', '#1565c0', '#2e7d32', '#ef6c00', '#37474f'];
+  VO.TOPS = { suit: ['#2b3a67', '#3b3f4a', '#5b4a3a', '#1f2430', '#4a4f5c'], shirt: ['#a9c7f0', '#dfe9f7', '#b7e0c9', '#f4f6f8'], cardigan: ['#d97aa6', '#f0ead6', '#8e5aa8', '#e8a87c'] };
+
+  // nilai acak yang stabil per id (agar penampilan agen lama tetap sama setelah update)
+  const seeded = (id, salt) => {
+    let h = 2166136261;
+    for (const c of String(id) + salt) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    return (h >>> 0) / 4294967296;
+  };
+  const spick = (id, salt, arr) => arr[Math.floor(seeded(id, salt) * arr.length)];
+
+  VO.ensureLook = function (a) {
+    const id = a.id || VO.uid('ag');
+    if (!a.style) a.style = a.isDirector || a.id === 'boss' ? 'suit' : spick(id, 'st', ['suit', 'shirt', 'shirt', 'cardigan']);
+    if (a.hairStyle == null) a.hairStyle = a.style === 'cardigan' ? spick(id, 'hs', [2, 3, 5]) : spick(id, 'hs', [0, 1, 1, 4, 5]);
+    if (!a.top || !a.topV2) { a.top = a.shirt && a.style === 'suit' && a.shirt.startsWith('#2') ? a.shirt : spick(id, 'tp', VO.TOPS[a.style]); a.topV2 = true; }
+    if (!a.pants) a.pants = spick(id, 'pn', VO.PANTS);
+    if (!a.tie) a.tie = spick(id, 'ti', VO.TIES);
+    if (a.glasses == null) a.glasses = seeded(id, 'gl') < 0.25;
+    if (a.mustache == null) a.mustache = a.style !== 'cardigan' && seeded(id, 'mu') < 0.12;
+    return a;
+  };
+
+  VO.makeAgent = (o = {}) => VO.ensureLook({
     id: o.id || VO.uid('ag'),
     name: o.name || VO.randomName(),
     role: o.role || 'Staff',
@@ -74,6 +101,7 @@
     shirt: o.shirt || VO.pick(VO.SHIRTS),
     live: !!o.live,
     memory: Array.isArray(o.memory) ? o.memory : [],
+    style: o.style, hairStyle: o.hairStyle, top: o.top, topV2: o.top ? true : undefined, pants: o.pants, tie: o.tie, glasses: o.glasses, mustache: o.mustache,
   });
 
   /* ---------------------------------------------------------------- default */
@@ -94,7 +122,7 @@
       settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
-      boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, shirt: '#1f2430', hair: '#1c1c1c' }),
+      boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
       facilities: [],
       divisions: [],
       departments: [],
@@ -375,7 +403,7 @@
       for (const a of [s.boss, ...s.agents]) if (String(a.model).startsWith('claude-')) a.model = VO.DEFAULT_MODEL;
       s.settings.modelsV2 = true;
     }
-    for (const a of [s.boss, ...s.agents]) if (!Array.isArray(a.memory)) a.memory = [];
+    for (const a of [s.boss, ...s.agents]) { if (!Array.isArray(a.memory)) a.memory = []; VO.ensureLook(a); }
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');

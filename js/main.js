@@ -391,8 +391,8 @@
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const { sx, sy } = pos(e);
-      const before = R.screenToWorld(sx, sy);
-      R.cam.zoom = VO.clamp(R.cam.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 0.25, 3);
+      const before = R.screenToIso(sx, sy);
+      R.cam.zoom = VO.clamp(R.cam.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 0.2, 3);
       R.cam.x = before.x - sx / R.cam.zoom;
       R.cam.y = before.y - sy / R.cam.zoom;
     }, { passive: false });

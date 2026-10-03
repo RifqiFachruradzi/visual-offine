@@ -1,6 +1,6 @@
 # Visual Office — Kantor Agent AI
 
-Visualisasi kantor 2D (gaya pixel) yang karyawannya adalah **agent AI** (ditenagai Gemini, gratis). Mirip `claude-office`, tapi milikmu sendiri: kamu bisa
+Visualisasi kantor **isometrik 2.5D** (gaya pixel ala Habbo) yang karyawannya adalah **agent AI** (ditenagai Gemini, gratis). Mirip `claude-office`, tapi milikmu sendiri: kamu bisa
 mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, dan ada **Boss** yang memberi perintah.
 
 ## Fitur
@@ -12,6 +12,7 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | **Mulai dari kosong** | Kantor baru hanya berisi Ruang Boss, Ruang Rapat, dan Pantry — cocok untuk demo menambah divisi & karyawan. Tombol **Contoh** memuat kantor contoh, **Kosongkan** mulai dari nol lagi. |
 | **Hierarki kantor** | Kamu (Boss) → Direktur Divisi → Ketua Tim (lead) → Anggota. Setiap level briefing ke atasan, bekerja di mejanya, lalu melapor balik. |
 | **Divisi & Departemen** | Tambah / edit / hapus divisi (zona berwarna) dan departemen (ruangan dengan meja otomatis). |
+| **Karakter gaya Habbo** | Karyawan isometrik dengan gaya pakaian (jas & dasi, kemeja & dasi, cardigan & rok), 6 model rambut, kacamata, kumis, dan warna yang bisa diatur. Boss memakai mahkota. |
 | **Agen AI** | Nama, jabatan, model (**Gemini Flash / Flash-Lite / Pro** — gratis; Claude opsional), *system prompt* / kepribadian, warna baju-rambut-kulit, pindah departemen, jadikan lead. |
 | **Editor layout** | Geser ruangan & zona, ubah ukuran (pojok kanan-bawah), tambah Ruang Rapat / Pantry / Lounge, taruh furnitur (tanaman, sofa, rak buku, whiteboard, dispenser, printer, server, arcade), ganti lantai, ukuran peta, **Tata Otomatis**. |
 | **Perintah Boss** | Beri tugas ke seluruh kantor (ada rapat besar di ruang rapat), satu divisi, satu tim, atau satu agen. Lihat progres & hasil tiap agen. |
@@ -102,7 +103,7 @@ js/sim.js           grid jalan, pathfinding (BFS), perilaku karyawan
 js/tasks.js         alur tugas hierarkis + pemetaan event live Claude Code
 js/icons.js         ikon SVG (pengganti emoji) untuk HTML & canvas
 js/ai.js            klien ke backend (/api/run, /api/events) + antrean rate limit
-js/render.js        renderer canvas (lantai, dinding, meja, karakter, balon chat)
+js/render.js        renderer isometrik 2.5D: lantai, dinding, meja, furnitur, karakter gaya Habbo, balon chat
 js/ui.js            panel organisasi, inspector, daftar tugas, dialog
 js/main.js          bootstrap, game loop, kamera & editor
 lib/llm.js          lapisan LLM bersama (Gemini / Claude), dipakai lokal & Vercel

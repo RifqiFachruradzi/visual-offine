@@ -116,23 +116,38 @@
     app().select({ kind: 'agent', id: a.id });
   };
 
+  // Kolom penampilan karakter (gaya Habbo)
+  function lookFields(a) {
+    VO.ensureLook(a);
+    return [
+      { key: 'style', label: 'Gaya pakaian', type: 'select', value: a.style, options: Object.entries(VO.STYLES).map(([value, label]) => ({ value, label })) },
+      { key: 'hairStyle', label: 'Model rambut', type: 'select', value: String(a.hairStyle), options: VO.HAIR_STYLES.map((label, i) => ({ value: String(i), label })) },
+      { key: 'colors', label: 'Warna (atasan · celana/rok · dasi · rambut · kulit)', type: 'colors', value: [a.top, a.pants, a.tie, a.hair, a.skin], names: ['Atasan', 'Celana / rok', 'Dasi', 'Rambut', 'Kulit'] },
+      { key: 'glasses', label: 'Pakai kacamata', type: 'checkbox', value: !!a.glasses },
+      { key: 'mustache', label: 'Berkumis', type: 'checkbox', value: !!a.mustache },
+    ];
+  }
+  function lookValues(v) {
+    const [top, pants, tie, hair, skin] = v.colors;
+    return { style: v.style, hairStyle: parseInt(v.hairStyle, 10) || 0, top, topV2: true, shirt: top, pants, tie, hair, skin, glasses: v.glasses, mustache: v.mustache };
+  }
+
   async function agentForm(title, a, isNew) {
     const s = S();
     if (a.id === 'boss') {
       // Boss = kamu: tidak ada model / prompt AI. Nama mengikuti akun login bila ada.
-      const bf = [{ key: 'colors', label: 'Penampilan (baju · rambut · kulit)', type: 'colors', value: [a.shirt, a.hair, a.skin], names: ['Baju', 'Rambut', 'Kulit'] }];
+      const bf = lookFields(a);
       if (!VO.app.user) bf.unshift({ key: 'name', label: 'Nama kamu', value: a.name, required: true });
       const v = await ui.form('Profil Boss (kamu)', bf);
       if (!v) return null;
-      const [shirt, hair, skin] = v.colors;
-      return { name: v.name || a.name, shirt, hair, skin };
+      return { name: v.name || a.name, ...lookValues(v) };
     }
     const fields = [
       { key: 'name', label: 'Nama', value: a.name, required: true },
       { key: 'role', label: 'Jabatan / peran', value: a.role },
       { key: 'model', label: 'Model AI', type: 'select', value: a.model, options: VO.MODELS.map((m) => ({ value: m.id, label: m.label })) },
       { key: 'prompt', label: 'Instruksi / kepribadian (system prompt)', type: 'textarea', value: a.prompt, placeholder: 'mis. Kamu ahli SEO yang teliti dan suka data.' },
-      { key: 'colors', label: 'Penampilan (baju · rambut · kulit)', type: 'colors', value: [a.shirt, a.hair, a.skin], names: ['Baju', 'Rambut', 'Kulit'] },
+      ...lookFields(a),
     ];
     if (a.id !== 'boss' && !a.isDirector && !a.live) {
       fields.push({ key: 'deptId', label: 'Departemen', type: 'select', value: a.deptId, options: s.departments.map((d) => ({ value: d.id, label: (s.divisions.find((x) => x.id === d.divisionId)?.name || '') + ' › ' + d.name })) });
@@ -140,8 +155,7 @@
     }
     const v = await ui.form(title, fields, isNew ? 'Rekrut' : 'Simpan');
     if (!v || !v.name) return null;
-    const [shirt, hair, skin] = v.colors;
-    const out = { name: v.name, role: v.role || 'Staff', model: v.model, prompt: v.prompt, shirt, hair, skin };
+    const out = { name: v.name, role: v.role || 'Staff', model: v.model, prompt: v.prompt, ...lookValues(v) };
     if ('deptId' in v) { out.deptId = v.deptId; out.isLead = v.isLead; }
     return out;
   }
@@ -311,7 +325,7 @@
       const model = VO.MODELS.find((m) => m.id === a.model)?.label || a.model;
       const running = s.tasks.flatMap((t) => t.subtasks.filter((st) => st.agentId === a.id && st.status === 'working').map((st) => t.title));
       const icon = a.id === 'boss' ? 'crown' : a.isDirector ? 'briefcase' : a.isLead ? 'star' : a.live ? 'live' : 'bot';
-      h = `<div class="insp-head"><div class="avatar" style="background:${esc(a.shirt)}">${VO.icon(icon)}</div><div><div class="insp-name">${esc(a.name)}</div><div class="insp-role">${esc(a.role)}</div></div></div>
+      h = `<div class="insp-head"><div class="avatar portrait"><img src="${VO.render.portrait(a)}" alt="" /></div><div><div class="insp-name">${esc(a.name)}</div><div class="insp-role">${esc(a.role)}</div></div></div>
         <div class="kv">
           <span>Status</span><span>${esc(rt?.liveTool && rt.liveTool !== 'thinking' ? 'Pakai tool: ' + rt.liveTool : STATUS_TXT[rt?.status] || rt?.status || '-')}</span>
           ${a.id !== 'boss' ? `<span>Model</span><span>${esc(model)}</span>` : `<span>Peran</span><span>Kamu — pemberi perintah</span>`}

@@ -193,3 +193,6 @@ button .ic, .btn .ic { margin-right: 2px; }
 @media (max-width: 1680px) { .lbl-wide { display: none; } }
 .toolbar { gap: 6px; }
 .company { width: 180px; }
+
+.avatar.portrait { background: linear-gradient(160deg, #2d3344, #1b1e27); overflow: hidden; border: 1px solid var(--line); }
+.avatar.portrait img { width: 44px; height: 44px; image-rendering: auto; }

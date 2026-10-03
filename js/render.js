@@ -1,15 +1,61 @@
 /* =========================================================================
- * render.js — menggambar kantor di <canvas> (gaya pixel / top-down).
- * Layer statis (lantai, dinding, meja, furnitur) di-cache di offscreen canvas,
- * layer dinamis (karyawan, monitor, balon chat) digambar tiap frame.
+ * render.js — renderer ISOMETRIK 2.5D (gaya pixel / Habbo) di <canvas>.
+ *
+ * Simulasi tetap bekerja di koordinat grid (tile). Renderer memproyeksikan
+ * setiap tile (tx, ty) ke layar isometrik:
+ *     x = OX + (tx - ty) * 32        y = OY + (tx + ty) * 16
+ * Lantai di-cache di offscreen canvas; dinding, meja, furnitur, dan karakter
+ * digambar tiap frame dan diurutkan berdasarkan kedalaman (tx + ty) agar
+ * benda di depan menutupi benda di belakang.
  * ========================================================================= */
 (function () {
   const VO = window.VO;
-  const T = VO.TILE;
-  const R = (VO.render = { cam: { x: 0, y: 0, zoom: 1 }, staticDirty: true, hover: null, selected: null });
+  const T = VO.TILE; // ukuran tile simulasi (px) — rt.x / T = posisi tile
+  const HW = 32, HH = 16; // setengah lebar & tinggi belah ketupat isometrik
+  const R = (VO.render = { cam: { x: 0, y: 0, zoom: 1 }, staticDirty: true, hover: null, selected: null, hoverObj: null });
 
-  let staticCanvas = null;
+  let floorCanvas = null;
+  let props = [];
+  const geo = { OX: 0, OY: 90, W: 0, H: 0 };
 
+  /* ------------------------------------------------------------ util warna & geometri */
+  const hexToRgb = (hex) => {
+    const n = parseInt(String(hex).slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  };
+  const shade = (hex, f) => {
+    const [r, g, b] = hexToRgb(hex);
+    const m = (v) => Math.max(0, Math.min(255, Math.round(f >= 1 ? v + (255 - v) * (f - 1) : v * f)));
+    return `rgb(${m(r)},${m(g)},${m(b)})`;
+  };
+  const mix = (a, b, t) => {
+    const x = hexToRgb(a), y = hexToRgb(b);
+    const c = x.map((v, i) => Math.round(v + (y[i] - v) * t));
+    return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
+  const alpha = (hex, a) => { const [r, g, b] = hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; };
+
+  function updateGeo(s) {
+    geo.OX = s.map.h * HW + 40;
+    geo.OY = 90;
+    geo.W = (s.map.w + s.map.h) * HW + 80;
+    geo.H = (s.map.w + s.map.h) * HH + geo.OY + 60;
+  }
+  const iso = (tx, ty, z = 0) => ({ x: geo.OX + (tx - ty) * HW, y: geo.OY + (tx + ty) * HH - z });
+  const toTile = (ix, iy) => {
+    const a = (ix - geo.OX) / HW, b = (iy - geo.OY) / HH;
+    return { x: (a + b) / 2, y: (b - a) / 2 };
+  };
+  R.iso = iso;
+
+  const poly = (ctx, pts, fill, stroke) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); }
+  };
   const rr = (ctx, x, y, w, h, r) => {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -21,376 +67,581 @@
   };
   R.roundRect = rr;
 
-  const hexA = (hex, a) => {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-  };
+  const diamond = (tx, ty, w = 1, d = 1, z = 0) => [iso(tx, ty, z), iso(tx + w, ty, z), iso(tx + w, ty + d, z), iso(tx, ty + d, z)];
 
-  /* ------------------------------------------------------------ static layer */
-  function buildStatic(s) {
-    const W = s.map.w * T, H = s.map.h * T;
-    if (!staticCanvas) staticCanvas = document.createElement('canvas');
-    staticCanvas.width = W; staticCanvas.height = H;
-    const ctx = staticCanvas.getContext('2d');
+  /**
+   * Balok isometrik dari (x0,y0) sampai (x1,y1) di grid, alas di ketinggian z,
+   * tinggi h (px layar). c = warna dasar; sisi diberi bayangan otomatis.
+   * Mengembalikan sudut-sudut sisi depan untuk dekorasi (jendela, layar, dll.).
+   */
+  function box(ctx, x0, y0, x1, y1, z, h, c, opt = {}) {
+    const top = c.top || shade(c.base || c, 1.12);
+    const left = c.left || shade(c.base || c, 0.86); // sisi +ty (kiri-bawah)
+    const right = c.right || shade(c.base || c, 0.7); // sisi +tx (kanan-bawah)
+    const fL = [iso(x0, y1, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x0, y1, z + h)];
+    const fR = [iso(x1, y0, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x1, y0, z + h)];
+    const fT = [iso(x0, y0, z + h), iso(x1, y0, z + h), iso(x1, y1, z + h), iso(x0, y1, z + h)];
+    poly(ctx, fL, left);
+    poly(ctx, fR, right);
+    poly(ctx, fT, top);
+    if (opt.outline !== false) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const f of [fL, fR, fT]) { ctx.moveTo(f[0].x, f[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(f[i].x, f[i].y); ctx.closePath(); }
+      ctx.stroke();
+    }
+    return { fL, fR, fT };
+  }
+
+  // Titik di sisi depan-kiri (+ty) balok: u = 0..1 sepanjang x, v = 0..1 dari bawah ke atas
+  const onFace = (f, u, v) => ({
+    x: f[0].x + (f[1].x - f[0].x) * u + (f[3].x - f[0].x) * v,
+    y: f[0].y + (f[1].y - f[0].y) * u + (f[3].y - f[0].y) * v,
+  });
+  const facePanel = (ctx, f, u0, u1, v0, v1, fill) => poly(ctx, [onFace(f, u0, v0), onFace(f, u1, v0), onFace(f, u1, v1), onFace(f, u0, v1)], fill);
+
+  /* ------------------------------------------------------------ lantai (cache) */
+  function buildFloor(s) {
+    updateGeo(s);
+    if (!floorCanvas) floorCanvas = document.createElement('canvas');
+    floorCanvas.width = geo.W;
+    floorCanvas.height = geo.H;
+    const ctx = floorCanvas.getContext('2d');
     const fl = VO.FLOORS[s.settings.floor] || VO.FLOORS.wood;
 
-    // lantai
-    for (let y = 0; y < s.map.h; y++)
-      for (let x = 0; x < s.map.w; x++) {
-        ctx.fillStyle = (x + y) % 2 ? fl.a : fl.b;
-        ctx.fillRect(x * T, y * T, T, T);
-      }
-    if (s.settings.floor === 'wood') {
-      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-      for (let y = 0; y < s.map.h * 2; y++) { ctx.beginPath(); ctx.moveTo(0, y * 16 + 0.5); ctx.lineTo(W, y * 16 + 0.5); ctx.stroke(); }
-    }
-    // dinding luar
-    ctx.strokeStyle = '#2a2e38'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, W - 6, H - 6); ctx.lineWidth = 1;
+    // tepi platform (tebal) agar lantai terlihat seperti blok 3D
+    const depth = 14;
+    const A = iso(0, s.map.h), B = iso(s.map.w, s.map.h), C = iso(s.map.w, 0);
+    poly(ctx, [A, B, { x: B.x, y: B.y + depth }, { x: A.x, y: A.y + depth }], shade(fl.a, 0.55));
+    poly(ctx, [B, C, { x: C.x, y: C.y + depth }, { x: B.x, y: B.y + depth }], shade(fl.a, 0.42));
 
-    // zona divisi
-    for (const div of s.divisions) {
-      const z = div.zone;
-      ctx.fillStyle = hexA(div.color, 0.13);
-      ctx.fillRect(z.x * T, z.y * T, z.w * T, z.h * T);
-      ctx.setLineDash([8, 6]);
-      ctx.strokeStyle = hexA(div.color, 0.8); ctx.lineWidth = 2;
-      ctx.strokeRect(z.x * T + 1, z.y * T + 1, z.w * T - 2, z.h * T - 2);
-      ctx.setLineDash([]); ctx.lineWidth = 1;
-      // label
-      ctx.font = 'bold 15px Inter, system-ui, sans-serif';
-      const label = 'Divisi ' + div.name;
-      const tw = ctx.measureText(label).width;
-      const lx = (div.directorDesk.x + 1.8) * T, ly = z.y * T + 6;
-      ctx.fillStyle = div.color; rr(ctx, lx, ly, tw + 36, 22, 6); ctx.fill();
-      VO.drawIcon(ctx, 'layers', lx + 15, ly + 11, 13, '#fff');
-      ctx.fillStyle = '#fff'; ctx.fillText(label, lx + 27, ly + 16);
-      drawDesk(ctx, div.directorDesk.x, div.directorDesk.y, '#4a3b55');
-      drawChair(ctx, div.directorDesk.x, div.directorDesk.y + 1);
-    }
-
-    // fasilitas
-    for (const f of s.facilities) {
-      drawRoomFloor(ctx, f, f.color);
-      drawFacilityInterior(ctx, s, f);
-      drawWalls(ctx, f, f);
-      plate(ctx, f, f.name, f.color);
-    }
-    // departemen
+    const tint = new Map(); // "x,y" → warna lantai ruangan
+    const setRect = (r, color, inset = 0) => {
+      for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
+    };
+    for (const div of s.divisions) setRect(div.zone, mix(fl.a, div.color, 0.22));
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      const color = div ? div.color : '#888888';
-      drawRoomFloor(ctx, d.room, color);
-      const slots = VO.deskSlots(d.room);
-      slots.forEach((sl) => { drawDesk(ctx, sl.desk.x, sl.desk.y); drawChair(ctx, sl.chair.x, sl.chair.y); });
-      drawWalls(ctx, d.room, null);
-      plate(ctx, d.room, d.name, color);
+      setRect(d.room, mix('#e9edf2', div ? div.color : '#888888', 0.16));
     }
-    for (const f of s.furniture) drawFurniture(ctx, f);
-    R.staticDirty = false;
-  }
+    for (const f of s.facilities) {
+      setRect(f, mix('#ece6dc', f.color, 0.2));
+      if (f.type === 'boss') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 3 }, '#9c3b45');
+      if (f.type === 'lounge') setRect({ x: f.x + 2, y: f.y + 2, w: f.w - 4, h: f.h - 4 }, mix('#ece6dc', '#9d4edd', 0.45));
+    }
 
-  function drawRoomFloor(ctx, r, color) {
-    ctx.fillStyle = '#ebe5da';
-    ctx.fillRect(r.x * T, r.y * T, r.w * T, r.h * T);
-    ctx.fillStyle = hexA(color, 0.2);
-    ctx.fillRect(r.x * T, r.y * T, r.w * T, r.h * T);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
-    for (let x = r.x; x < r.x + r.w; x++) for (let y = r.y; y < r.y + r.h; y++) ctx.strokeRect(x * T + 0.5, y * T + 0.5, T - 1, T - 1);
-  }
-
-  function drawWalls(ctx, r, fac) {
-    const doors = VO.doorTiles(r, fac);
-    const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
-    const tile = (x, y) => {
-      if (isDoor(x, y)) {
-        ctx.fillStyle = '#8a6a4a';
-        ctx.fillRect(x * T, y * T + 12, 3, 8); ctx.fillRect(x * T + T - 3, y * T + 12, 3, 8);
-        return;
+    for (let y = 0; y < s.map.h; y++)
+      for (let x = 0; x < s.map.w; x++) {
+        const c = tint.get(x + ',' + y);
+        const base = c || ((x + y) % 2 ? fl.a : fl.b);
+        const fill = c ? ((x + y) % 2 ? base : shade(base, 0.96)) : base;
+        poly(ctx, diamond(x, y), fill, 'rgba(0,0,0,0.06)');
       }
-      ctx.fillStyle = '#434957'; ctx.fillRect(x * T, y * T, T, T);
-      ctx.fillStyle = '#5a6172'; ctx.fillRect(x * T, y * T, T, 7);
-      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x * T, y * T + T - 3, T, 3);
+    // garis putus-putus batas zona divisi
+    for (const div of s.divisions) {
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 2;
+      poly(ctx, diamond(div.zone.x, div.zone.y, div.zone.w, div.zone.h), null, alpha(div.color, 0.85));
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+    }
+  }
+
+  /* ------------------------------------------------------------ props (benda 3D) */
+  // Setiap prop: { k: kedalaman (tx+ty pusat), d: fungsi gambar(ctx, now, s) }
+  function buildProps(s) {
+    props = [];
+    const add = (k, d) => props.push({ k, d });
+
+    const walls = (r, color, fac) => {
+      const doors = VO.doorTiles(r, fac);
+      const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
+      const wallBase = mix('#efe9df', color, 0.18);
+      const TALL = 46, LOW = 12, TH_ = 0.32; // tinggi dinding belakang/depan & ketebalan
+      const L = r.x, Tp = r.y, Rr = r.x + r.w - 1, B = r.y + r.h - 1;
+      const seg = (x0, y0, x1, y1, h, kind, win) =>
+        add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
+          const f = box(ctx, x0, y0, x1, y1, 0, h, { top: '#5a6172', left: shade(wallBase, 0.95), right: shade(wallBase, 0.78) });
+          if (win && kind === 'top') facePanel(ctx, f.fL, 0.18, 0.82, 0.38, 0.8, 'rgba(150,205,255,0.75)');
+          if (win && kind === 'left') facePanel(ctx, f.fR, 0.18, 0.82, 0.38, 0.8, 'rgba(150,205,255,0.75)');
+          if (h > LOW) { // list warna di kaki dinding
+            if (kind === 'top') facePanel(ctx, f.fL, 0, 1, 0, 0.12, shade(color, 0.85));
+            if (kind === 'left') facePanel(ctx, f.fR, 0, 1, 0, 0.12, shade(color, 0.75));
+          }
+        });
+      // dinding belakang (tinggi): baris atas & kolom kiri
+      for (let x = L; x <= Rr; x++) {
+        if (isDoor(x, Tp)) continue;
+        const x0 = x === L ? x + 1 - TH_ : x, x1 = x === Rr ? x + TH_ : x + 1;
+        seg(x0, Tp + 1 - TH_, x1, Tp + 1, TALL, 'top', (x - L) % 3 === 1);
+      }
+      for (let y = Tp + 1; y <= B; y++) {
+        if (isDoor(L, y)) continue;
+        const y1 = y === B ? y + TH_ : y + 1;
+        seg(L + 1 - TH_, y, L + 1, y1, TALL, 'left', (y - Tp) % 3 === 2);
+      }
+      // dinding depan (rendah) agar isi ruangan tetap terlihat
+      for (let x = L + 1; x <= Rr; x++) {
+        if (isDoor(x, B)) continue;
+        const x1 = x === Rr ? x + TH_ : x + 1;
+        seg(x, B, x1, B + TH_, LOW, 'bottom');
+      }
+      for (let y = Tp + 1; y < B; y++) {
+        if (isDoor(Rr, y)) continue;
+        seg(Rr, y, Rr + TH_, y + 1, LOW, 'right');
+      }
     };
-    for (let x = r.x; x < r.x + r.w; x++) { tile(x, r.y); tile(x, r.y + r.h - 1); }
-    for (let y = r.y + 1; y < r.y + r.h - 1; y++) { tile(r.x, y); tile(r.x + r.w - 1, y); }
-    // jendela kaca di dinding atas
-    ctx.fillStyle = 'rgba(160,210,255,0.55)';
-    for (let x = r.x + 1; x < r.x + r.w - 1; x += 3) if (!isDoor(x, r.y)) ctx.fillRect(x * T + 6, r.y * T + 10, T - 12, 10);
+
+    for (const f of s.facilities) {
+      walls(f, f.color, f);
+      facilityProps(s, f, add);
+    }
+    for (const d of s.departments) {
+      const div = s.divisions.find((x) => x.id === d.divisionId);
+      walls(d.room, div ? div.color : '#888888', null);
+      const members = VO.deptAgents(s, d.id);
+      VO.deskSlots(d.room).forEach((sl, i) => {
+        add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], '#a47148'));
+        add(sl.chair.x + sl.chair.y + 0.9, (ctx) => drawChair(ctx, sl.chair.x, sl.chair.y));
+        add(sl.chair.x + sl.chair.y + 1.3, (ctx) => drawChairBack(ctx, sl.chair.x, sl.chair.y));
+      });
+    }
+    for (const div of s.divisions) {
+      const dd = div.directorDesk;
+      add(dd.x + dd.y + 1, (ctx, now) => drawDesk(ctx, dd.x, dd.y, now, VO.director(s, div.id), '#6d4c7d'));
+      add(dd.x + dd.y + 1.9, (ctx) => drawChair(ctx, dd.x, dd.y + 1));
+      add(dd.x + dd.y + 2.3, (ctx) => drawChairBack(ctx, dd.x, dd.y + 1));
+    }
+    for (const fu of s.furniture) add(fu.x + fu.y + 1, (ctx) => drawFurniture(ctx, fu));
+    props.sort((a, b) => a.k - b.k);
   }
 
-  function plate(ctx, r, text, color) {
-    ctx.font = 'bold 12px Inter, system-ui, sans-serif';
-    const tw = ctx.measureText(text).width + 14;
-    const x = r.x * T + 10, y = r.y * T - 9;
-    ctx.fillStyle = color; rr(ctx, x, y, tw, 18, 5); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.fillText(text, x + 7, y + 13);
+  function facilityProps(s, f, add) {
+    if (f.type === 'boss') {
+      const seat = VO.bossSeat(s);
+      const dx = seat.desk.x, dy = seat.desk.y;
+      for (let i = -1; i <= 1; i++)
+        add(dx + i + dy + 1, (ctx) => {
+          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
+          facePanel(ctx, b.fL, 0, 1, 0.82, 0.9, '#d4a843');
+          if (i === 0) { // dokumen & pena di atas meja
+            poly(ctx, diamond(dx + 0.3, dy + 0.3, 0.35, 0.3, 17), '#f5f5f5');
+          }
+          if (i === 1) { // lampu meja
+            const p = iso(dx + 1.5, dy + 0.4, 17);
+            ctx.fillStyle = '#2e7d32'; ctx.beginPath(); ctx.arc(p.x, p.y - 5, 5, 0, 7); ctx.fill();
+          }
+        });
+      // kursi boss (sandaran di belakang, boss menghadap ke depan)
+      add(seat.chair.x + seat.chair.y + 0.8, (ctx) => {
+        const cx = seat.chair.x, cy = seat.chair.y;
+        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, '#3b2418');
+        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, '#5a3826');
+      });
+      add(f.x + 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 }));
+      add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
+    } else if (f.type === 'meeting') {
+      const t = VO.meetingTable(f);
+      for (let y = t.y; y < t.y + t.h; y++)
+        for (let x = t.x; x < t.x + t.w; x++)
+          add(x + y + 1, (ctx) => {
+            box(ctx, x - (x === t.x ? -0.1 : 0), y - (y === t.y ? -0.1 : 0), x + 1 - (x === t.x + t.w - 1 ? 0.1 : 0), y + 1 - (y === t.y + t.h - 1 ? 0.1 : 0), 0, 14,
+              { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
+          });
+      for (const p of VO.sim.spots(s, 'meeting'))
+        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, '#3a3f4b'));
+      // layar presentasi di dinding belakang
+      add(f.x + f.w / 2 + f.y + 1.2, (ctx) => {
+        const b = box(ctx, f.x + f.w / 2 - 1.5, f.y + 0.95, f.x + f.w / 2 + 1.5, f.y + 1.02, 18, 22, '#22252c');
+        facePanel(ctx, b.fL, 0.06, 0.94, 0.12, 0.88, '#4fc3f7');
+      });
+    } else if (f.type === 'pantry') {
+      for (let x = f.x + 1; x < f.x + f.w - 1; x++) {
+        const y = f.y + 1;
+        add(x + y + 1, (ctx) => {
+          box(ctx, x, y + 0.1, x + 1, y + 0.9, 0, 18, { top: '#d5d9df', left: '#9aa1ad', right: '#858c98' });
+          if (x === f.x + 1) { // mesin kopi
+            const b = box(ctx, x + 0.25, y + 0.25, x + 0.75, y + 0.65, 18, 16, '#2a2a2e');
+            facePanel(ctx, b.fL, 0.3, 0.7, 0.55, 0.75, '#e53935');
+          }
+          if (x === f.x + f.w - 2) box(ctx, x + 0.1, y + 0.15, x + 0.9, y + 0.85, 18, 26, '#eceff1'); // kulkas
+          if (x === f.x + 3) { const p = iso(x + 0.5, y + 0.5, 18); ctx.fillStyle = '#ffb74d'; ctx.beginPath(); ctx.arc(p.x, p.y - 3, 4, 0, 7); ctx.fill(); }
+        });
+      }
+      for (let i = 0; i < Math.floor((f.w - 2) / 3); i++) {
+        const x = f.x + 2 + i * 3, y = f.y + f.h - 3;
+        add(x + y + 1, (ctx) => box(ctx, x + 0.2, y + 0.2, x + 0.8, y + 0.8, 0, 13, { top: '#efebe9', left: '#bcaaa4', right: '#a1887f' }));
+      }
+    } else if (f.type === 'lounge') {
+      add(f.x + 2 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'sofa', x: f.x + 2, y: f.y + 1 }));
+      add(f.x + 4 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'sofa', x: f.x + 4, y: f.y + 1 }));
+      add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'arcade', x: f.x + f.w - 2, y: f.y + 1 }));
+    }
   }
 
-  function drawDesk(ctx, x, y, top = '#a47148') {
-    const px = x * T, py = y * T;
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(px + 3, py + 22, 27, 5);
-    ctx.fillStyle = '#7a5134'; ctx.fillRect(px + 2, py + 8, 28, 16);
-    ctx.fillStyle = top; ctx.fillRect(px + 2, py + 8, 28, 11);
-    // keyboard
-    ctx.fillStyle = '#d9dce3'; ctx.fillRect(px + 10, py + 14, 12, 3);
-    // cangkir
-    ctx.fillStyle = '#fff'; ctx.fillRect(px + 25, py + 10, 3, 4);
+  function drawDesk(ctx, x, y, now, ent, topColor) {
+    box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 0, 15, { top: topColor, left: shade(topColor, 0.78), right: shade(topColor, 0.62) });
+    // monitor menghadap kursi (sisi +ty)
+    const rt = ent && VO.sim.rt.get(ent.id);
+    const working = rt && rt.working;
+    box(ctx, x + 0.46, y + 0.32, x + 0.54, y + 0.42, 15, 5, '#2a2d34'); // kaki monitor
+    const m = box(ctx, x + 0.22, y + 0.3, x + 0.78, y + 0.38, 19, 15, '#1d2129');
+    let scr = '#20242c';
+    if (ent) scr = working ? '#16466e' : '#2d3a4f';
+    facePanel(ctx, m.fL, 0.08, 0.92, 0.12, 0.9, scr);
+    if (working) {
+      for (let i = 0; i < 3; i++) {
+        const len = 0.25 + ((Math.sin(now / 170 + i * 2 + x * 3) + 1) / 2) * 0.5;
+        ctx.strokeStyle = ['#4fc3f7', '#81c784', '#ffd54f'][i];
+        ctx.lineWidth = 1.2;
+        const a = onFace(m.fL, 0.15, 0.7 - i * 0.2), bb = onFace(m.fL, 0.15 + len * 0.7, 0.7 - i * 0.2);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(bb.x, bb.y); ctx.stroke();
+      }
+      const c = onFace(m.fL, 0.5, 0.5);
+      ctx.fillStyle = 'rgba(79,195,247,0.13)'; ctx.beginPath(); ctx.arc(c.x, c.y + 6, 18, 0, 7); ctx.fill();
+    }
+    // keyboard & cangkir
+    poly(ctx, diamond(x + 0.3, y + 0.55, 0.4, 0.14, 15), '#d9dce3');
+    box(ctx, x + 0.8, y + 0.2, x + 0.88, y + 0.28, 15, 5, '#ffffff', { outline: false });
   }
 
   function drawChair(ctx, x, y) {
-    const px = x * T + T / 2, py = y * T + T / 2;
-    ctx.fillStyle = '#2f3440';
-    ctx.beginPath(); ctx.ellipse(px, py + 6, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, '#353a46'); // dudukan
+    box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false }); // tiang
   }
-
-  function drawFacilityInterior(ctx, s, f) {
-    if (f.type === 'boss') {
-      // karpet
-      ctx.fillStyle = 'rgba(140,30,40,0.35)';
-      rr(ctx, (f.x + 2) * T, (f.y + 1.5) * T, (f.w - 4) * T, (f.h - 3) * T, 10); ctx.fill();
-      const seat = VO.bossSeat(s);
-      const dx = (seat.desk.x - 1) * T, dy = seat.desk.y * T;
-      ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(dx + 4, dy + 24, 3 * T - 6, 6);
-      ctx.fillStyle = '#3e2618'; ctx.fillRect(dx + 2, dy + 4, 3 * T - 4, 22);
-      ctx.fillStyle = '#5c3a24'; ctx.fillRect(dx + 2, dy + 4, 3 * T - 4, 15);
-      ctx.fillStyle = '#d4a843'; ctx.fillRect(dx + 2, dy + 18, 3 * T - 4, 2);
-      ctx.fillStyle = '#f1f1f1'; ctx.fillRect(dx + 12, dy + 8, 10, 7); // dokumen
-      ctx.fillStyle = '#2e7d32'; ctx.beginPath(); ctx.arc(dx + 3 * T - 14, dy + 9, 5, 0, 7); ctx.fill();
-      ctx.fillStyle = '#4a2c1a'; // kursi boss
-      rr(ctx, seat.chair.x * T + 5, seat.chair.y * T + 2, 22, 22, 6); ctx.fill();
-      // rak & trofi
-      drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 });
-      drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 });
-    } else if (f.type === 'meeting') {
-      const t = VO.meetingTable(f);
-      ctx.fillStyle = 'rgba(0,0,0,0.18)'; rr(ctx, t.x * T + 4, t.y * T + 8, t.w * T, t.h * T, 18); ctx.fill();
-      ctx.fillStyle = '#6b4f3a'; rr(ctx, t.x * T, t.y * T + 2, t.w * T, t.h * T - 4, 18); ctx.fill();
-      ctx.fillStyle = '#80614a'; rr(ctx, t.x * T + 4, t.y * T + 5, t.w * T - 8, t.h * T - 14, 14); ctx.fill();
-      for (let x = t.x; x < t.x + t.w; x++) { drawChair(ctx, x, t.y - 1); drawChair(ctx, x, t.y + t.h); }
-      // layar presentasi
-      ctx.fillStyle = '#222'; ctx.fillRect((f.x + f.w / 2 - 2) * T, (f.y + 1) * T + 2, 4 * T, 10);
-      ctx.fillStyle = '#4fc3f7'; ctx.fillRect((f.x + f.w / 2 - 2) * T + 3, (f.y + 1) * T + 4, 4 * T - 6, 6);
-    } else if (f.type === 'pantry') {
-      ctx.fillStyle = '#9aa1ad'; ctx.fillRect((f.x + 1) * T, (f.y + 1) * T, (f.w - 2) * T, T - 4);
-      ctx.fillStyle = '#c7ccd4'; ctx.fillRect((f.x + 1) * T, (f.y + 1) * T, (f.w - 2) * T, 8);
-      const mx = (f.x + 2) * T; // mesin kopi
-      ctx.fillStyle = '#222'; ctx.fillRect(mx + 4, (f.y + 1) * T - 4, 18, 22);
-      ctx.fillStyle = '#e53935'; ctx.fillRect(mx + 8, (f.y + 1) * T, 4, 4);
-      const fx = (f.x + f.w - 3) * T; // kulkas
-      ctx.fillStyle = '#eceff1'; ctx.fillRect(fx + 6, (f.y + 1) * T - 8, 20, 30);
-      ctx.fillStyle = '#90a4ae'; ctx.fillRect(fx + 22, (f.y + 1) * T, 2, 8);
-      // meja bar kecil
-      ctx.fillStyle = '#d7ccc8';
-      for (let i = 0; i < Math.floor((f.w - 2) / 3); i++) { ctx.beginPath(); ctx.arc((f.x + 2 + i * 3) * T, (f.y + f.h - 3) * T, 12, 0, 7); ctx.fill(); }
-    } else if (f.type === 'lounge') {
-      ctx.fillStyle = 'rgba(157,78,221,0.25)';
-      rr(ctx, (f.x + 1.5) * T, (f.y + 2) * T, (f.w - 3) * T, (f.h - 3.5) * T, 14); ctx.fill();
-      drawFurniture(ctx, { type: 'sofa', x: f.x + 2, y: f.y + 1 });
-      drawFurniture(ctx, { type: 'sofa', x: f.x + 4, y: f.y + 1 });
-      drawFurniture(ctx, { type: 'arcade', x: f.x + f.w - 2, y: f.y + 1 });
-    }
+  // sandaran digambar SETELAH karyawan yang duduk, agar menutupi punggungnya
+  function drawChairBack(ctx, x, y) {
+    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, '#2b2f3a');
   }
 
   function drawFurniture(ctx, f) {
-    const px = f.x * T, py = f.y * T;
+    const x = f.x, y = f.y;
+    const sh = iso(x + 0.5, y + 0.5);
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.beginPath(); ctx.ellipse(px + 16, py + 28, 12, 4, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sh.x, sh.y, 20, 9, 0, 0, 7); ctx.fill();
     switch (f.type) {
-      case 'plant':
-        ctx.fillStyle = '#8d5a3b'; ctx.fillRect(px + 10, py + 18, 12, 10);
-        ctx.fillStyle = '#2e7d32';
-        for (const [ox, oy, r] of [[16, 12, 8], [10, 15, 6], [22, 15, 6], [16, 6, 6]]) { ctx.beginPath(); ctx.arc(px + ox, py + oy, r, 0, 7); ctx.fill(); }
-        ctx.fillStyle = '#43a047'; ctx.beginPath(); ctx.arc(px + 14, py + 9, 4, 0, 7); ctx.fill();
-        break;
-      case 'sofa':
-        ctx.fillStyle = '#5c6bc0'; rr(ctx, px + 1, py + 6, 30, 20, 6); ctx.fill();
-        ctx.fillStyle = '#7986cb'; rr(ctx, px + 5, py + 13, 22, 10, 4); ctx.fill();
-        break;
-      case 'bookshelf':
-        ctx.fillStyle = '#6d4c41'; ctx.fillRect(px + 3, py, 26, 28);
-        for (let r = 0; r < 3; r++) for (let b = 0; b < 5; b++) {
-          ctx.fillStyle = VO.SHIRTS[(r * 5 + b) % VO.SHIRTS.length];
-          ctx.fillRect(px + 5 + b * 4.6, py + 2 + r * 9, 3.5, 7);
+      case 'plant': {
+        box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 14, '#8d5a3b');
+        const p = iso(x + 0.5, y + 0.5, 14);
+        for (const [ox, oy, r, c] of [[0, -10, 10, '#2e7d32'], [-8, -4, 8, '#388e3c'], [8, -5, 8, '#2e7d32'], [0, -20, 8, '#43a047'], [-4, -13, 6, '#66bb6a']]) {
+          ctx.fillStyle = c; ctx.beginPath(); ctx.arc(p.x + ox, p.y + oy, r, 0, 7); ctx.fill();
         }
         break;
-      case 'whiteboard':
-        ctx.fillStyle = '#90a4ae'; ctx.fillRect(px + 14, py + 18, 3, 10);
-        ctx.fillStyle = '#fafafa'; ctx.fillRect(px + 1, py + 2, 30, 18);
-        ctx.strokeStyle = '#78909c'; ctx.strokeRect(px + 1.5, py + 2.5, 29, 17);
-        ctx.strokeStyle = '#e53935'; ctx.beginPath(); ctx.moveTo(px + 5, py + 14); ctx.lineTo(px + 12, py + 8); ctx.lineTo(px + 18, py + 12); ctx.lineTo(px + 26, py + 6); ctx.stroke();
+      }
+      case 'sofa':
+        box(ctx, x + 0.05, y + 0.2, x + 0.95, y + 0.85, 0, 10, '#5c6bc0');
+        box(ctx, x + 0.05, y + 0.12, x + 0.95, y + 0.32, 0, 22, '#4a59ad');
+        box(ctx, x + 0.05, y + 0.2, x + 0.17, y + 0.85, 0, 16, '#4a59ad');
+        box(ctx, x + 0.83, y + 0.2, x + 0.95, y + 0.85, 0, 16, '#4a59ad');
         break;
-      case 'cooler':
-        ctx.fillStyle = '#eceff1'; ctx.fillRect(px + 9, py + 12, 14, 16);
-        ctx.fillStyle = 'rgba(66,165,245,0.85)'; ctx.fillRect(px + 10, py + 1, 12, 12);
+      case 'bookshelf': {
+        const b = box(ctx, x + 0.08, y + 0.3, x + 0.92, y + 0.7, 0, 44, '#6d4c41');
+        for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++)
+          facePanel(ctx, b.fL, 0.08 + i * 0.145, 0.08 + i * 0.145 + 0.11, 0.08 + r * 0.23, 0.08 + r * 0.23 + 0.17, VO.SHIRTS[(r * 6 + i) % VO.SHIRTS.length]);
         break;
-      case 'printer':
-        ctx.fillStyle = '#cfd8dc'; ctx.fillRect(px + 4, py + 10, 24, 16);
-        ctx.fillStyle = '#37474f'; ctx.fillRect(px + 6, py + 14, 20, 3);
-        ctx.fillStyle = '#fff'; ctx.fillRect(px + 9, py + 5, 14, 7);
+      }
+      case 'whiteboard': {
+        box(ctx, x + 0.47, y + 0.5, x + 0.53, y + 0.56, 0, 14, '#90a4ae');
+        const b = box(ctx, x + 0.05, y + 0.48, x + 0.95, y + 0.54, 14, 28, '#fafafa');
+        ctx.strokeStyle = '#e53935'; ctx.lineWidth = 1.5;
+        const pts = [[0.1, 0.3], [0.3, 0.6], [0.5, 0.45], [0.7, 0.8], [0.9, 0.6]].map(([u, v]) => onFace(b.fL, u, v));
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y); ctx.stroke();
         break;
-      case 'server':
-        ctx.fillStyle = '#263238'; ctx.fillRect(px + 5, py, 22, 28);
-        for (let i = 0; i < 5; i++) { ctx.fillStyle = i % 2 ? '#66bb6a' : '#29b6f6'; ctx.fillRect(px + 8, py + 3 + i * 5, 3, 2); }
+      }
+      case 'cooler': {
+        box(ctx, x + 0.3, y + 0.3, x + 0.7, y + 0.7, 0, 22, '#eceff1');
+        const p = iso(x + 0.5, y + 0.5, 22);
+        ctx.fillStyle = 'rgba(66,165,245,0.85)'; rr(ctx, p.x - 7, p.y - 16, 14, 16, 4); ctx.fill();
         break;
-      case 'arcade':
-        ctx.fillStyle = '#6a1b9a'; ctx.fillRect(px + 6, py, 20, 28);
-        ctx.fillStyle = '#00e5ff'; ctx.fillRect(px + 9, py + 4, 14, 9);
-        ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(px + 12, py + 18, 2, 0, 7); ctx.fill();
-        ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.arc(px + 20, py + 18, 2, 0, 7); ctx.fill();
+      }
+      case 'printer': {
+        const b = box(ctx, x + 0.15, y + 0.2, x + 0.85, y + 0.8, 0, 14, '#cfd8dc');
+        facePanel(ctx, b.fL, 0.15, 0.85, 0.35, 0.5, '#37474f');
+        poly(ctx, diamond(x + 0.3, y + 0.3, 0.4, 0.35, 15), '#ffffff');
         break;
+      }
+      case 'server': {
+        const b = box(ctx, x + 0.15, y + 0.2, x + 0.85, y + 0.8, 0, 46, '#263238');
+        for (let i = 0; i < 6; i++) facePanel(ctx, b.fL, 0.15, 0.3, 0.1 + i * 0.14, 0.15 + i * 0.14, i % 2 ? '#66bb6a' : '#29b6f6');
+        break;
+      }
+      case 'arcade': {
+        const b = box(ctx, x + 0.2, y + 0.25, x + 0.8, y + 0.75, 0, 44, '#6a1b9a');
+        facePanel(ctx, b.fL, 0.15, 0.85, 0.55, 0.85, '#00e5ff');
+        facePanel(ctx, b.fL, 0.25, 0.4, 0.4, 0.47, '#ffeb3b');
+        facePanel(ctx, b.fL, 0.6, 0.75, 0.4, 0.47, '#f44336');
+        break;
+      }
     }
   }
   R.drawFurniture = drawFurniture;
 
-  /* ------------------------------------------------------------ dynamic */
-  function drawMonitors(ctx, s, now) {
-    const seats = [];
-    for (const d of s.departments) {
-      const ag = VO.deptAgents(s, d.id);
-      VO.deskSlots(d.room).forEach((sl, i) => seats.push({ desk: sl.desk, ent: ag[i] }));
-    }
-    for (const div of s.divisions) seats.push({ desk: div.directorDesk, ent: VO.director(s, div.id) });
-    for (const { desk, ent } of seats) {
-      const rt = ent && VO.sim.rt.get(ent.id);
-      const px = desk.x * T, py = desk.y * T;
-      ctx.fillStyle = '#1d2129'; ctx.fillRect(px + 8, py - 1, 16, 12);
-      ctx.fillRect(px + 14, py + 10, 4, 3);
-      let col = '#20242c';
-      if (ent) col = rt && rt.working ? '#123a5c' : '#2d3a4f';
-      ctx.fillStyle = col; ctx.fillRect(px + 9, py, 14, 9);
-      if (rt && rt.working) {
-        for (let i = 0; i < 3; i++) {
-          const w = 4 + ((Math.sin(now / 180 + i * 2 + desk.x) + 1) * 4) | 0;
-          ctx.fillStyle = ['#4fc3f7', '#81c784', '#ffd54f'][i];
-          ctx.fillRect(px + 10, py + 1.5 + i * 2.6, w, 1.4);
+  /* ------------------------------------------------------------ karakter gaya Habbo */
+  /**
+   * Gambar avatar dengan kaki di (0,0) koordinat lokal. Menghadap kanan-bawah
+   * secara default; o.mirror membalik ke kiri; o.back = tampak belakang.
+   */
+  function drawAvatar(ctx, a, o) {
+    const skin = a.skin, hair = a.hair, top = a.top || a.shirt, pants = a.pants || '#3b3f4a', tie = a.tie || '#c62828';
+    const style = a.style || 'suit';
+    const female = style === 'cardigan';
+    const sw = o.moving ? Math.sin(o.phase * 13) : 0; // ayunan langkah
+    const sit = o.sitting;
+    ctx.save();
+    if (o.mirror) ctx.scale(-1, 1);
+    ctx.lineJoin = 'round';
+
+    // bayangan
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 13, 5, 0, 0, 7); ctx.fill();
+
+    const lift = sit ? 6 : Math.abs(sw) * 1.2; // badan naik turun saat jalan
+    ctx.translate(0, -lift);
+
+    // ---- kaki
+    const legTop = -20;
+    if (!sit) {
+      const legs = [[-6, sw * 2.5], [1, -sw * 2.5]];
+      legs.forEach(([lx, off], i) => {
+        if (female) {
+          ctx.fillStyle = shade(skin, i ? 0.92 : 1);
+          ctx.fillRect(lx + 1, legTop + 6 + off * 0.3, 3.5, 13);
+        } else {
+          ctx.fillStyle = shade(pants, i ? 0.82 : 1);
+          ctx.fillRect(lx, legTop + off * 0.3, 5.5, 18);
         }
-        ctx.fillStyle = 'rgba(79,195,247,0.12)';
-        ctx.beginPath(); ctx.arc(px + 16, py + 6, 16, 0, 7); ctx.fill();
+        ctx.fillStyle = female ? shade(top, 0.6) : '#26272b';
+        rr(ctx, lx - 0.5 + off * 0.4, -3.5 + off * 0.2, 7.5, 4, 1.5); ctx.fill();
+      });
+    } else {
+      // duduk: paha ke depan
+      ctx.fillStyle = female ? shade(skin, 0.95) : pants;
+      ctx.fillRect(-6, legTop + 4, 12, 7);
+    }
+    if (female) { // rok
+      ctx.fillStyle = shade(pants === '#c2b49a' ? '#3b3f6a' : pants, 1.05);
+      poly(ctx, [{ x: -8, y: legTop - 1 }, { x: 8, y: legTop - 1 }, { x: 10, y: legTop + 10 }, { x: -10, y: legTop + 10 }], ctx.fillStyle);
+    }
+
+    // ---- badan
+    const bodyTop = -41, bodyH = 22;
+    const torso = top;
+    ctx.fillStyle = torso;
+    rr(ctx, -9.5, bodyTop, 19, bodyH, 5); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'; // bayangan sisi kanan
+    rr(ctx, 4.5, bodyTop + 1, 5, bodyH - 2, 3); ctx.fill();
+    if (!o.back) {
+      if (style === 'suit') {
+        ctx.fillStyle = '#f5f7fa';
+        poly(ctx, [{ x: -3.5, y: bodyTop }, { x: 3.5, y: bodyTop }, { x: 0, y: bodyTop + 10 }], '#f5f7fa');
+        ctx.fillStyle = tie; ctx.fillRect(-1.1, bodyTop + 1.5, 2.4, 11);
+        poly(ctx, [{ x: -1.6, y: bodyTop + 12 }, { x: 1.9, y: bodyTop + 12 }, { x: 0.15, y: bodyTop + 15 }], tie);
+        ctx.strokeStyle = shade(torso, 0.7); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-3.5, bodyTop); ctx.lineTo(0, bodyTop + 13); ctx.lineTo(3.5, bodyTop); ctx.stroke();
+      } else if (style === 'shirt') {
+        poly(ctx, [{ x: -3.5, y: bodyTop }, { x: 3.5, y: bodyTop }, { x: 0, y: bodyTop + 4 }], shade(torso, 0.85));
+        ctx.fillStyle = tie; ctx.fillRect(-1.1, bodyTop + 2, 2.4, 12);
+        poly(ctx, [{ x: -1.6, y: bodyTop + 13 }, { x: 1.9, y: bodyTop + 13 }, { x: 0.15, y: bodyTop + 16 }], tie);
+        ctx.fillStyle = '#2b2b30'; ctx.fillRect(-9, bodyTop + bodyH - 3, 18, 2.5); // ikat pinggang
+      } else {
+        ctx.fillStyle = '#f7f1e8'; // atasan dalam
+        rr(ctx, -4, bodyTop + 1, 8, bodyH - 4, 2); ctx.fill();
+        ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(0, bodyTop + 5, 1.3, 0, 7); ctx.fill(); // kalung
       }
-    }
-  }
-
-
-  function drawPerson(ctx, s, ent, rt, now) {
-    const x = rt.x, y = rt.y;
-    const moving = rt.status === 'walking' || (rt.cur && rt.cur.type === 'goto');
-    const back = rt.sitting && ent.id !== 'boss';
-    const bob = moving ? Math.sin(rt.phase * 14) * 1.2 : 0;
-    const sel = R.selected === ent.id, hov = R.hover === ent.id;
-
-    if (sel || hov) {
-      ctx.strokeStyle = sel ? '#ffd166' : 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(x, y + 11, 13, 5, 0, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
-    }
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.beginPath(); ctx.ellipse(x, y + 11, 9, 3.5, 0, 0, 7); ctx.fill();
-
-    const by = y - 4 + bob - (rt.sitting ? 1 : 0);
-    // kaki
-    if (!rt.sitting) {
-      const sw = moving ? Math.sin(rt.phase * 14) * 3 : 0;
-      ctx.fillStyle = '#2d3142';
-      ctx.fillRect(x - 5, by + 8, 4, 7 + sw * 0.3);
-      ctx.fillRect(x + 1, by + 8, 4, 7 - sw * 0.3);
-      ctx.fillStyle = '#1b1b1b';
-      ctx.fillRect(x - 6 + sw * 0.4, by + 14, 5, 2.5); ctx.fillRect(x + 1 - sw * 0.4, by + 14, 5, 2.5);
-    }
-    // badan
-    ctx.fillStyle = ent.live ? '#d97757' : ent.shirt;
-    rr(ctx, x - 8, by - 3, 16, 13, 4); ctx.fill();
-    if (!back && (ent.id === 'boss' || ent.isDirector)) {
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 3, by - 3); ctx.lineTo(x + 3, by - 3); ctx.lineTo(x, by + 2); ctx.fill();
-      ctx.fillStyle = ent.id === 'boss' ? '#c62828' : '#1565c0'; ctx.fillRect(x - 1, by - 1, 2, 8);
     }
     // lengan
-    ctx.fillStyle = ent.live ? '#c0623f' : shade(ent.shirt);
-    const armSw = rt.working ? Math.sin(now / 90) * 1.5 : moving ? Math.sin(rt.phase * 14) * 2 : 0;
-    ctx.fillRect(x - 10, by - 1 + armSw, 3, 9); ctx.fillRect(x + 7, by - 1 - armSw, 3, 9);
-    // kepala
-    const hy = by - 9;
-    ctx.fillStyle = ent.skin; ctx.beginPath(); ctx.arc(x, hy, 7, 0, 7); ctx.fill();
-    ctx.fillStyle = ent.hair;
-    if (back) { ctx.beginPath(); ctx.arc(x, hy - 0.5, 7.2, 0, 7); ctx.fill(); }
-    else {
-      ctx.beginPath(); ctx.arc(x, hy - 1.5, 7.2, Math.PI, 0); ctx.fill();
-      ctx.fillRect(x - 7, hy - 2, 3, 4); ctx.fillRect(x + 4, hy - 2, 3, 4);
-      ctx.fillStyle = '#1a1a1a';
-      const lx = rt.facing * 0.8;
-      ctx.fillRect(x - 3 + lx, hy + 0.5, 1.8, 2); ctx.fillRect(x + 1.5 + lx, hy + 0.5, 1.8, 2);
-      if (ent.live) { ctx.fillStyle = '#d97757'; ctx.fillRect(x - 6, hy - 9, 12, 3); }
-    }
-    // mahkota boss / badge
-    if (ent.id === 'boss') {
-      ctx.fillStyle = '#ffca28';
-      ctx.beginPath(); ctx.moveTo(x - 6, hy - 7); ctx.lineTo(x - 6, hy - 13); ctx.lineTo(x - 3, hy - 9); ctx.lineTo(x, hy - 14); ctx.lineTo(x + 3, hy - 9); ctx.lineTo(x + 6, hy - 13); ctx.lineTo(x + 6, hy - 7); ctx.closePath(); ctx.fill();
-    } else if (ent.isDirector || ent.isLead) {
-      VO.drawIcon(ctx, ent.isDirector ? 'briefcase' : 'star', x + 8, hy - 6, 5.5, '#fff', ent.isDirector ? '#ab47bc' : '#ffb300');
-    }
-    // ikon status
-    const icon = rt.liveTool && rt.liveTool !== 'thinking' ? 'tool' : rt.liveTool === 'thinking' ? 'brain' : VO.sim.STATUS_ICON[rt.status];
-    if (icon) VO.drawIcon(ctx, icon, x - 11, hy - 6, 6.5, '#1d1f27', 'rgba(255,255,255,0.92)');
-    // progress bar kerja
-    if (rt.working && rt.progress > 0 && rt.progress < 1 && !ent.live) {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x - 11, hy - 15, 22, 4);
-      ctx.fillStyle = '#66bb6a'; ctx.fillRect(x - 10, hy - 14, 20 * rt.progress, 2);
-    }
-    // nama
-    if (R.cam.zoom >= 0.85 || sel || hov) {
-      ctx.font = `${ent.id === 'boss' ? 'bold ' : ''}9px Inter, system-ui, sans-serif`;
-      const name = ent.name;
-      const tw = ctx.measureText(name).width;
-      ctx.fillStyle = 'rgba(20,22,30,0.72)'; rr(ctx, x - tw / 2 - 4, y + 14, tw + 8, 12, 4); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(name, x - tw / 2, y + 23);
-    }
-  }
-
-  function drawBubble(ctx, rt, now) {
-    if (!rt.bubble || rt.bubble.until < now) return;
-    const text = rt.bubble.text;
-    const icon = rt.bubble.icon;
-    ctx.font = '10px Inter, system-ui, sans-serif';
-    const iw = icon ? 13 : 0;
-    const tw = Math.min(180, ctx.measureText(text).width) + iw;
-    const x = rt.x - tw / 2 - 6, y = rt.y - 46;
-    const fade = Math.min(1, (rt.bubble.until - now) / 300);
-    ctx.globalAlpha = fade;
-    ctx.fillStyle = '#ffffff'; rr(ctx, x, y, tw + 12, 17, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(rt.x - 4, y + 17); ctx.lineTo(rt.x, y + 22); ctx.lineTo(rt.x + 4, y + 17); ctx.fill();
-    ctx.fillStyle = '#1d1f27';
-    if (icon) VO.drawIcon(ctx, icon, x + 11, y + 8.5, 9, '#4f8cff');
-    ctx.fillStyle = '#1d1f27';
-    ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y, tw + 4, 17); ctx.clip();
-    ctx.fillText(text, x + 6 + iw, y + 12); ctx.restore();
-    ctx.globalAlpha = 1;
-  }
-
-  function shade(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    const f = (v) => Math.max(0, Math.floor(v * 0.78));
-    return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
-  }
-
-  /* ------------------------------------------------------------ edit overlay */
-  function drawEditOverlay(ctx, s, ui) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    for (let x = 0; x <= s.map.w; x++) { ctx.beginPath(); ctx.moveTo(x * T, 0); ctx.lineTo(x * T, s.map.h * T); ctx.stroke(); }
-    for (let y = 0; y <= s.map.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * T); ctx.lineTo(s.map.w * T, y * T); ctx.stroke(); }
-    const box = (r, col, handle) => {
-      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(r.x * T, r.y * T, r.w * T, r.h * T); ctx.lineWidth = 1;
-      if (handle) { ctx.fillStyle = col; ctx.fillRect((r.x + r.w) * T - 12, (r.y + r.h) * T - 12, 12, 12); }
+    const arm = (x, swing) => {
+      ctx.fillStyle = shade(torso, 0.92);
+      rr(ctx, x, bodyTop + 2 + swing, 4.5, 17, 2); ctx.fill();
+      ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(x + 2.2, bodyTop + 20 + swing, 2.6, 0, 7); ctx.fill();
     };
-    for (const div of s.divisions) box(div.zone, VO.render.hoverObj === div ? '#fff' : div.color, true);
-    for (const d of s.departments) box(d.room, VO.render.hoverObj === d ? '#fff' : 'rgba(255,209,102,0.9)', true);
-    for (const f of s.facilities) box(f, VO.render.hoverObj === f ? '#fff' : 'rgba(129,212,250,0.9)', true);
+    const armSw = o.working ? Math.sin(o.now / 85) * 1.5 : sw * 2.5;
+    arm(-13.5, armSw);
+    arm(9, -armSw);
+    // leher
+    ctx.fillStyle = shade(skin, 0.9); ctx.fillRect(-2.5, bodyTop - 3, 5, 4);
+
+    // ---- kepala (besar, khas Habbo)
+    const hy = bodyTop - 12;
+    // rambut panjang di belakang kepala
+    if (a.hairStyle === 2 && !o.back) { ctx.fillStyle = shade(hair, 0.85); rr(ctx, -10.5, hy - 6, 21, 22, 6); ctx.fill(); }
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.ellipse(0.5, hy, 9.5, 10.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = shade(skin, 0.9); // telinga
+    ctx.beginPath(); ctx.ellipse(-8.5, hy + 1, 2, 3, 0, 0, 7); ctx.fill();
+
+    if (o.back) {
+      ctx.fillStyle = hair;
+      if (a.hairStyle === 4) { ctx.beginPath(); ctx.ellipse(0.5, hy + 3, 9.6, 6, 0, 0, Math.PI); ctx.fill(); }
+      else { ctx.beginPath(); ctx.ellipse(0.5, hy - 0.5, 9.9, 10.8, 0, 0, 7); ctx.fill(); }
+      if (a.hairStyle === 2) { rr(ctx, -10, hy, 21, 17, 6); ctx.fill(); }
+      if (a.hairStyle === 3) { ctx.beginPath(); ctx.arc(0.5, hy - 11, 5, 0, 7); ctx.fill(); }
+    } else {
+      // wajah menghadap kanan-bawah (3/4)
+      ctx.fillStyle = '#1b1b1f';
+      ctx.fillRect(1.5, hy - 1, 2, 3.2); ctx.fillRect(6.5, hy - 1, 2, 3.2);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(1.5, hy - 1, 1, 1); ctx.fillRect(6.5, hy - 1, 1, 1);
+      ctx.fillStyle = shade(hair, 0.8); ctx.fillRect(1, hy - 3.5, 3, 1); ctx.fillRect(6, hy - 3.5, 3, 1); // alis
+      ctx.fillStyle = shade(skin, 0.82); ctx.fillRect(5, hy + 2.5, 1.8, 2); // hidung
+      ctx.strokeStyle = shade(skin, 0.55); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(2.5, hy + 6); ctx.quadraticCurveTo(5, hy + 7.2, 7.5, hy + 6); ctx.stroke(); // senyum
+      if (female) { ctx.fillStyle = 'rgba(240,98,146,0.35)'; ctx.beginPath(); ctx.arc(0, hy + 4, 1.8, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(8.5, hy + 4, 1.6, 0, 7); ctx.fill(); }
+      if (a.mustache) { ctx.fillStyle = shade(hair, 0.9); rr(ctx, 1.5, hy + 4, 7, 2, 1); ctx.fill(); }
+      if (a.glasses) {
+        ctx.strokeStyle = '#2b2b30'; ctx.lineWidth = 1;
+        ctx.strokeRect(0.5, hy - 2, 4, 4); ctx.strokeRect(5.5, hy - 2, 4, 4);
+        ctx.beginPath(); ctx.moveTo(4.5, hy); ctx.lineTo(5.5, hy); ctx.stroke();
+      }
+      // rambut
+      ctx.fillStyle = hair;
+      switch (a.hairStyle) {
+        case 4: // botak: hanya samping
+          ctx.beginPath(); ctx.ellipse(-6.5, hy - 1, 3.5, 5, 0, 0, 7); ctx.fill();
+          break;
+        case 1: // belah samping
+          ctx.beginPath(); ctx.ellipse(0.5, hy - 5, 10.2, 7, 0, Math.PI, 0); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(-9.5, hy - 5); ctx.quadraticCurveTo(2, hy - 13, 10.5, hy - 3); ctx.lineTo(10, hy - 6); ctx.quadraticCurveTo(1, hy - 9, -9, hy - 2); ctx.fill();
+          ctx.fillRect(-10, hy - 5, 4, 8);
+          break;
+        case 2: // panjang
+          ctx.beginPath(); ctx.ellipse(0.5, hy - 4.5, 10.4, 7.5, 0, Math.PI, 0); ctx.fill();
+          ctx.fillRect(-10.5, hy - 5, 5, 18);
+          ctx.beginPath(); ctx.moveTo(-6, hy - 9); ctx.quadraticCurveTo(4, hy - 6, 10.8, hy - 2); ctx.lineTo(10.8, hy - 6); ctx.fill();
+          break;
+        case 3: // cepol
+          ctx.beginPath(); ctx.ellipse(0.5, hy - 4.5, 10.2, 7.2, 0, Math.PI, 0); ctx.fill();
+          ctx.beginPath(); ctx.arc(-5, hy - 12, 5, 0, 7); ctx.fill();
+          ctx.fillRect(-10, hy - 5, 3.5, 7);
+          break;
+        case 5: // ikal
+          for (const [cx, cy, r] of [[-6, -8, 4.5], [-1, -10, 4.8], [4.5, -9.5, 4.5], [8.5, -6.5, 3.5], [-8.5, -3, 3.8]]) { ctx.beginPath(); ctx.arc(cx + 0.5, hy + cy, r, 0, 7); ctx.fill(); }
+          break;
+        default: // pendek
+          ctx.beginPath(); ctx.ellipse(0.5, hy - 5, 10, 6.8, 0, Math.PI, 0); ctx.fill();
+          ctx.fillRect(-10, hy - 5, 4, 6);
+          ctx.beginPath(); ctx.moveTo(-6, hy - 8); ctx.lineTo(9, hy - 7); ctx.lineTo(10.3, hy - 3.5); ctx.lineTo(4, hy - 5.5); ctx.fill();
+      }
+    }
+    ctx.restore();
+    return hy - 11 - lift; // posisi puncak kepala (untuk mahkota/ikon)
+  }
+
+  function drawPerson(ctx, s, ent, rt, now) {
+    const fx = rt.x / T, fy = rt.y / T;
+    const p = iso(fx, fy);
+    const moving = rt.cur && rt.cur.type === 'goto' && rt.path && rt.path.length > 0;
+    let back = false, mirror = false;
+    if (rt.sitting) {
+      if (ent.id === 'boss') { back = false; mirror = true; } // boss menghadap ke depan (+ty)
+      else { back = true; mirror = false; } // karyawan menghadap meja (-ty)
+    } else if (rt.mdx != null) {
+      const sx = rt.mdx - rt.mdy, sy = rt.mdx + rt.mdy; // arah di layar
+      back = sy < -0.1;
+      mirror = sx < -0.1;
+    }
+    const sel = R.selected === ent.id, hov = R.hover === ent.id;
+    if (sel || hov) {
+      ctx.strokeStyle = sel ? '#ffd166' : 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 16, 7, 0, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+    }
+    ctx.save();
+    ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
+    ctx.scale(1.15, 1.15);
+    const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
+    const headTop = drawAvatar(ctx, look, { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now });
+    if (ent.id === 'boss') { // mahkota
+      ctx.fillStyle = '#ffca28';
+      const y = headTop + 2;
+      poly(ctx, [{ x: -7, y }, { x: -7, y: y - 7 }, { x: -3.5, y: y - 3 }, { x: 0, y: y - 9 }, { x: 3.5, y: y - 3 }, { x: 7, y: y - 7 }, { x: 7, y }], '#ffca28', '#b8860b');
+    }
+    ctx.restore();
+    rt._screen = { x: p.x, y: p.y, head: p.y + headTop * 1.15 };
+  }
+
+  /* ------------------------------------------------------------ overlay: label, nama, balon */
+  function drawLabels(ctx, s) {
+    ctx.font = 'bold 13px Inter, system-ui, sans-serif';
+    for (const div of s.divisions) {
+      const p = iso(div.zone.x + 0.5, div.zone.y + 0.5);
+      const label = 'Divisi ' + div.name;
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = div.color; rr(ctx, p.x - 6, p.y - 12, tw + 32, 22, 6); ctx.fill();
+      VO.drawIcon(ctx, 'layers', p.x + 6, p.y - 1, 12, '#fff');
+      ctx.fillStyle = '#fff'; ctx.fillText(label, p.x + 17, p.y + 4);
+    }
+    ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+    const plate = (r, text, color) => {
+      const p = iso(r.x + 1.2, r.y + 1, 50);
+      const tw = ctx.measureText(text).width + 14;
+      ctx.fillStyle = color; rr(ctx, p.x - 4, p.y - 9, tw, 17, 5); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillText(text, p.x + 3, p.y + 3);
+    };
+    for (const f of s.facilities) plate(f, f.name, f.color);
+    for (const d of s.departments) {
+      const div = s.divisions.find((x) => x.id === d.divisionId);
+      plate(d.room, d.name, div ? div.color : '#888888');
+    }
+  }
+
+  function drawPersonOverlay(ctx, ent, rt, now) {
+    const sc = rt._screen;
+    if (!sc) return;
+    const icon = rt.liveTool && rt.liveTool !== 'thinking' ? 'tool' : rt.liveTool === 'thinking' ? 'brain' : VO.sim.STATUS_ICON[rt.status];
+    if (icon) VO.drawIcon(ctx, icon, sc.x - 15, sc.head + 6, 8, '#1d1f27', 'rgba(255,255,255,0.94)');
+    if (ent.isDirector || ent.isLead) VO.drawIcon(ctx, ent.isDirector ? 'briefcase' : 'star', sc.x + 14, sc.head + 6, 7, '#fff', ent.isDirector ? '#ab47bc' : '#ffb300');
+    if (rt.working && rt.progress > 0 && rt.progress < 1 && !ent.live) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(sc.x - 13, sc.head - 6, 26, 5);
+      ctx.fillStyle = '#66bb6a'; ctx.fillRect(sc.x - 12, sc.head - 5, 24 * rt.progress, 3);
+    }
+    const sel = R.selected === ent.id, hov = R.hover === ent.id;
+    if (R.cam.zoom >= 0.8 || sel || hov) {
+      ctx.font = `${ent.id === 'boss' ? 'bold ' : ''}10px Inter, system-ui, sans-serif`;
+      const tw = ctx.measureText(ent.name).width;
+      ctx.fillStyle = 'rgba(20,22,30,0.78)'; rr(ctx, sc.x - tw / 2 - 5, sc.y + 6, tw + 10, 14, 4); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(ent.name, sc.x - tw / 2, sc.y + 16.5);
+    }
+    // balon chat
+    if (rt.bubble && rt.bubble.until > now) {
+      const text = rt.bubble.text, bi = rt.bubble.icon;
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      const iw = bi ? 14 : 0;
+      const tw = Math.min(200, ctx.measureText(text).width) + iw;
+      const bx = sc.x - tw / 2 - 7, by = sc.head - 30;
+      ctx.globalAlpha = Math.min(1, (rt.bubble.until - now) / 300);
+      ctx.fillStyle = '#ffffff'; rr(ctx, bx, by, tw + 14, 19, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sc.x - 4, by + 19); ctx.lineTo(sc.x, by + 24); ctx.lineTo(sc.x + 4, by + 19); ctx.fill();
+      if (bi) VO.drawIcon(ctx, bi, bx + 12, by + 9.5, 10, '#4f8cff');
+      ctx.fillStyle = '#1d1f27';
+      ctx.save(); ctx.beginPath(); ctx.rect(bx + 4, by, tw + 6, 19); ctx.clip();
+      ctx.fillText(text, bx + 7 + iw, by + 13.5); ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawEditOverlay(ctx, s, ui) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    for (let x = 0; x <= s.map.w; x++) { const a = iso(x, 0), b = iso(x, s.map.h); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    for (let y = 0; y <= s.map.h; y++) { const a = iso(0, y), b = iso(s.map.w, y); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    const outline = (r, col) => {
+      ctx.lineWidth = 2;
+      poly(ctx, diamond(r.x, r.y, r.w, r.h), null, col);
+      const h = iso(r.x + r.w, r.y + r.h);
+      poly(ctx, [{ x: h.x, y: h.y - 9 }, { x: h.x + 9, y: h.y }, { x: h.x, y: h.y + 9 }, { x: h.x - 9, y: h.y }], col);
+      ctx.lineWidth = 1;
+    };
+    for (const div of s.divisions) outline(div.zone, R.hoverObj === div ? '#ffffff' : div.color);
+    for (const d of s.departments) outline(d.room, R.hoverObj === d ? '#ffffff' : 'rgba(255,209,102,0.95)');
+    for (const f of s.facilities) outline(f, R.hoverObj === f ? '#ffffff' : 'rgba(129,212,250,0.95)');
     if (ui.hoverTile) {
       const { x, y } = ui.hoverTile;
-      if (ui.tool && ui.tool.startsWith('furn:')) {
-        ctx.globalAlpha = 0.6; drawFurniture(ctx, { type: ui.tool.slice(5), x, y }); ctx.globalAlpha = 1;
-      }
-      ctx.strokeStyle = ui.tool === 'erase' ? '#ef5350' : '#ffd166';
-      ctx.strokeRect(x * T + 1, y * T + 1, T - 2, T - 2);
+      if (ui.tool && ui.tool.startsWith('furn:')) { ctx.globalAlpha = 0.6; drawFurniture(ctx, { type: ui.tool.slice(5), x, y }); ctx.globalAlpha = 1; }
+      ctx.lineWidth = 2;
+      poly(ctx, diamond(x, y), ui.tool === 'erase' ? 'rgba(239,83,80,0.25)' : 'rgba(255,209,102,0.25)', ui.tool === 'erase' ? '#ef5350' : '#ffd166');
+      ctx.lineWidth = 1;
     }
   }
 
@@ -399,46 +650,93 @@
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const now = performance.now();
-    if (R.staticDirty || !staticCanvas) buildStatic(s);
+    if (R.staticDirty || !floorCanvas) {
+      buildFloor(s);
+      buildProps(s);
+      R.staticDirty = false;
+    }
+    updateGeo(s);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#171a21'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#1b1f2a'); g.addColorStop(1, '#12141a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
     const z = R.cam.zoom * dpr;
     ctx.setTransform(z, 0, 0, z, -R.cam.x * z, -R.cam.y * z);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(staticCanvas, 0, 0);
-    drawMonitors(ctx, s, now);
+    ctx.drawImage(floorCanvas, 0, 0);
 
-    const ents = [s.boss, ...s.agents]
-      .map((e) => [e, VO.sim.rt.get(e.id)])
-      .filter(([, rt]) => rt)
-      .sort((a, b) => a[1].y - b[1].y);
-    for (const [e, rt] of ents) drawPerson(ctx, s, e, rt, now);
-    for (const [, rt] of ents) drawBubble(ctx, rt, now);
+    // gabungkan props + karakter, urutkan dari belakang ke depan
+    const people = [s.boss, ...s.agents].map((e) => [e, VO.sim.rt.get(e.id)]).filter(([, rt]) => rt);
+    const items = props.slice();
+    for (const [e, rt] of people) items.push({ k: rt.x / T + rt.y / T + 0.05, d: (c) => drawPerson(c, s, e, rt, now) });
+    items.sort((a, b) => a.k - b.k);
+    for (const it of items) it.d(ctx, now, s);
+
+    drawLabels(ctx, s);
     if (ui.edit) drawEditOverlay(ctx, s, ui);
+    for (const [e, rt] of people) drawPersonOverlay(ctx, e, rt, now);
   };
 
-  R.screenToWorld = (sx, sy) => ({ x: sx / R.cam.zoom + R.cam.x, y: sy / R.cam.zoom + R.cam.y });
+  /* ------------------------------------------------------------ kamera & hit test */
+  // Koordinat layar → "dunia" dalam satuan simulasi (tile × T), dipakai editor & klik
+  R.screenToIso = (sx, sy) => ({ x: sx / R.cam.zoom + R.cam.x, y: sy / R.cam.zoom + R.cam.y });
+  R.screenToWorld = (sx, sy) => {
+    const p = R.screenToIso(sx, sy);
+    const t = toTile(p.x, p.y);
+    return { x: t.x * T, y: t.y * T };
+  };
 
   R.hitPerson = function (s, wx, wy) {
-    let best = null, bd = 16;
+    const p = iso(wx / T, wy / T); // kembali ke koordinat isometrik
+    let best = null, bd = Infinity;
     for (const e of [s.boss, ...s.agents]) {
       const rt = VO.sim.rt.get(e.id);
-      if (!rt) continue;
-      const d = Math.hypot(rt.x - wx, rt.y - 6 - wy);
+      const sc = rt && rt._screen;
+      if (!sc) continue;
+      if (p.x < sc.x - 16 || p.x > sc.x + 16 || p.y < sc.head - 4 || p.y > sc.y + 4) continue;
+      const d = Math.abs(p.x - sc.x) + Math.abs(p.y - (sc.y + sc.head) / 2) * 0.5 - sc.y * 0.001;
       if (d < bd) { bd = d; best = e; }
     }
     return best;
   };
 
   R.focus = function (canvas, wx, wy) {
+    const p = iso(wx / T, wy / T, 20);
     const vw = canvas.clientWidth / R.cam.zoom, vh = canvas.clientHeight / R.cam.zoom;
-    R.cam.x = wx - vw / 2; R.cam.y = wy - vh / 2;
+    R.cam.x = p.x - vw / 2;
+    R.cam.y = p.y - vh / 2;
   };
 
+  // Tampilkan area yang berisi ruangan/zona/furnitur (bukan seluruh lantai kosong)
   R.fit = function (canvas, s) {
-    const W = s.map.w * T, H = s.map.h * T;
-    R.cam.zoom = VO.clamp(Math.min(canvas.clientWidth / W, canvas.clientHeight / H) * 0.98, 0.25, 2.5);
-    R.cam.x = (W - canvas.clientWidth / R.cam.zoom) / 2;
-    R.cam.y = (H - canvas.clientHeight / R.cam.zoom) / 2;
+    updateGeo(s);
+    const rects = [...s.facilities, ...s.departments.map((d) => d.room), ...s.divisions.map((d) => d.zone), ...s.furniture.map((f) => ({ x: f.x, y: f.y, w: 1, h: 1 }))];
+    if (!rects.length) rects.push({ x: 0, y: 0, w: s.map.w, h: s.map.h });
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const r of rects) {
+      for (const p of [iso(r.x - 1, r.y - 1, 60), iso(r.x + r.w + 1, r.y - 1, 60), iso(r.x + r.w + 1, r.y + r.h + 1), iso(r.x - 1, r.y + r.h + 1)]) {
+        x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+      }
+    }
+    const W = x1 - x0, H = y1 - y0;
+    R.cam.zoom = VO.clamp(Math.min(canvas.clientWidth / W, canvas.clientHeight / H) * 0.97, 0.2, 2.2);
+    R.cam.x = x0 + W / 2 - canvas.clientWidth / R.cam.zoom / 2;
+    R.cam.y = y0 + H / 2 - canvas.clientHeight / R.cam.zoom / 2;
+  };
+
+  /* ------------------------------------------------------------ potret (inspector) */
+  const portraitCache = new Map();
+  R.portrait = function (ent) {
+    const key = [ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss'].join('|');
+    if (portraitCache.has(key)) return portraitCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = 88; c.height = 88;
+    const ctx = c.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.translate(22, 70);
+    const top = drawAvatar(ctx, ent, { back: false, mirror: false, moving: false, phase: 0, sitting: false, working: false, now: 0 });
+    if (ent.id === 'boss') poly(ctx, [{ x: -7, y: top + 2 }, { x: -7, y: top - 5 }, { x: -3.5, y: top - 1 }, { x: 0, y: top - 7 }, { x: 3.5, y: top - 1 }, { x: 7, y: top - 5 }, { x: 7, y: top + 2 }], '#ffca28');
+    const url = c.toDataURL();
+    portraitCache.set(key, url);
+    return url;
   };
 })();
