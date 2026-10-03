@@ -89,7 +89,11 @@
     fetch('/api/register', { cache: 'no-store' }).then((r) => r.json()).then((j) => {
       info = j;
       $('tabs').classList.toggle('hidden', !j.canRegister);
-      if (!j.configured) $('note').innerHTML = 'Login belum dikonfigurasi. Hubungkan <b>Upstash Redis</b> di Vercel → Storage lalu redeploy.';
+      if (!j.configured) {
+        const names = (j.dbEnvNames || []);
+        $('note').innerHTML = 'Login belum dikonfigurasi. Hubungkan <b>Upstash Redis</b> di Vercel → Storage (prefix <code>KV</code>) lalu <b>Redeploy</b>.<br/>' +
+          (names.length ? 'Variabel database yang terbaca: <code>' + names.map((n) => n.replace(/[<>&]/g, '')).join('</code>, <code>') + '</code>' : 'Belum ada variabel database yang terbaca oleh deployment ini.');
+      }
       else if (j.mode === 'env') $('note').innerHTML = 'Akun diatur lewat environment variable <code>APP_USERNAME</code> &amp; <code>APP_PASSWORD</code>.';
       else if (!j.canRegister) $('note').textContent = 'Pendaftaran akun baru sedang ditutup.';
       else $('note').textContent = 'Belum punya akun? Pilih tab Daftar.';
