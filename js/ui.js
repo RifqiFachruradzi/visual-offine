@@ -310,10 +310,12 @@
           ${running.length ? `<span>Mengerjakan</span><span>${running.map(esc).join('<br/>')}</span>` : ''}
           ${a.prompt ? `<span>Instruksi</span><span>${esc(a.prompt)}</span>` : ''}
         </div>
+        ${a.memory && a.memory.length ? `<div class="memory"><b>🧠 Ingatan (${a.memory.length})</b>${a.memory.map((m) => `<div class="m">${esc(m.text)}</div>`).join('')}</div>` : ''}
         <div class="btns">
           <button class="small" data-i="edit">✏️ Edit</button>
           ${a.id !== 'boss' ? `<button class="small" data-i="assign">📋 Beri tugas</button>` : ''}
           ${a.deptId && !a.isLead && !a.live ? `<button class="small" data-i="lead">⭐ Jadikan lead</button>` : ''}
+          ${a.memory && a.memory.length ? `<button class="small" data-i="forget">🧹 Lupakan</button>` : ''}
           ${a.id !== 'boss' ? `<button class="small danger" data-i="del">🗑 Hapus</button>` : ''}
         </div>`;
     } else if (sel.kind === 'dept') {
@@ -350,6 +352,7 @@
       if (i === 'edit') ({ agent: ui.editEntity, division: ui.editDivision, dept: ui.editDept, facility: ui.editFacility })[sel.kind](sel.id);
       if (i === 'del') ui.remove(sel.kind, sel.id);
       if (i === 'lead') ui.makeLead(sel.id);
+      if (i === 'forget') { const a = VO.findEntity(S(), sel.id); a.memory = []; VO.app.changed(); ui.toast('🧹 Ingatan ' + a.name + ' dihapus'); }
       if (i === 'addAgent') ui.addAgent(sel.id);
       if (i === 'addDept') ui.addDept(sel.id);
       if (i === 'assign') ui.assign(sel.kind, sel.id);
@@ -398,6 +401,65 @@
     if (ll._html !== lh) { ll.innerHTML = lh; ll._html = lh; }
   };
 
+  /* ------------------------------------------------------------ gudang dokumen */
+  const KIND = { report: 'laporan', work: 'hasil kerja', upload: 'unggahan' };
+
+  ui.renderDocs = function () {
+    const s = S();
+    const q = ($('docSearch').value || '').toLowerCase().trim();
+    const list = q ? s.docs.filter((d) => (d.title + ' ' + d.author + ' ' + d.content).toLowerCase().includes(q)) : s.docs;
+    let h = list.slice(0, 150).map((d) => `<div class="doc" data-id="${d.id}"><div class="t">📄 ${esc(d.title)}</div>
+      <div class="meta"><span class="kind ${d.kind}">${KIND[d.kind] || d.kind}</span><span>${esc(d.author)}</span><span>· ${fmtTime(d.t)}</span><span>· ${d.content.length < 1000 ? d.content.length : Math.round(d.content.length / 100) / 10 + 'k'} karakter</span></div></div>`).join('');
+    if (!h) h = q ? `<p class="empty">Tidak ada dokumen cocok.</p>` : `<p class="empty">Gudang dokumen masih kosong. Laporan tugas yang selesai tersimpan di sini otomatis, dan kamu bisa <b>⬆ Unggah</b> file .txt/.md sebagai pengetahuan — agen akan membacanya bila relevan dengan tugas.</p>`;
+    const el = $('docList');
+    if (el._html !== h) { el.innerHTML = h; el._html = h; }
+    $('docCount').textContent = s.docs.length;
+  };
+
+  ui.showDoc = function (id) {
+    const d = S().docs.find((x) => x.id === id);
+    if (!d) return;
+    $('resultTitle').textContent = '📄 ' + d.title;
+    $('resultBody').innerHTML = `<div style="color:var(--muted)">${KIND[d.kind] || d.kind} · ${esc(d.author)} · ${new Date(d.t).toLocaleString('id-ID')}</div>
+      <div class="btns" style="margin:8px 0"><button type="button" class="small" data-doc="download" data-id="${d.id}">⬇ Unduh .md</button><button type="button" class="small danger" data-doc="delete" data-id="${d.id}">🗑 Hapus</button></div>
+      <div>${ui.md(d.content)}</div>`;
+    $('resultDlg').showModal();
+  };
+
+  ui.bindDocs = function () {
+    $('docList').addEventListener('click', (e) => { const d = e.target.closest('.doc'); if (d) ui.showDoc(d.dataset.id); });
+    $('docSearch').addEventListener('input', () => ui.renderDocs());
+    $('docUpload').addEventListener('click', () => $('docFile').click());
+    $('docFile').addEventListener('change', async (e) => {
+      let n = 0;
+      for (const f of e.target.files) {
+        if (f.size > 500_000) { ui.toast('⚠️ ' + f.name + ' terlalu besar (maks 500 KB)'); continue; }
+        VO.addDoc(S(), { kind: 'upload', title: f.name, author: 'Boss (unggahan)', content: await f.text() });
+        n++;
+      }
+      e.target.value = '';
+      if (n) { VO.log(S(), `📚 ${n} dokumen diunggah ke Gudang Dokumen`); VO.app.changed(); ui.renderDocs(); ui.toast(`📚 ${n} dokumen tersimpan`); }
+    });
+    $('resultBody').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-doc]');
+      if (!b) return;
+      const s = S();
+      const d = s.docs.find((x) => x.id === b.dataset.id);
+      if (!d) return;
+      if (b.dataset.doc === 'download') {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([`# ${d.title}\n\n_${d.author} · ${new Date(d.t).toLocaleString('id-ID')}_\n\n${d.content}`], { type: 'text/markdown' }));
+        a.download = d.title.replace(/[^\w\- ]+/g, '_').slice(0, 80) + '.md';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } else {
+        s.docs = s.docs.filter((x) => x !== d);
+        $('resultDlg').close();
+        VO.app.changed(); ui.renderDocs();
+      }
+    });
+  };
+
   // markdown mini: judul, tebal, miring, kode inline, bullet
   ui.md = function (text) {
     return esc(text || '')
@@ -413,11 +475,11 @@
     const t = s.tasks.find((x) => x.id === id);
     if (!t) return;
     $('resultTitle').textContent = '📋 ' + t.title;
-    let h = `<div><b>Status:</b> ${ST_TXT[t.status] || t.status} · <b>Target:</b> ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))} · <b>Mode:</b> ${t.ai ? 'Claude API' : 'Simulasi'}</div>`;
+    let h = `<div><b>Status:</b> ${ST_TXT[t.status] || t.status} · <b>Target:</b> ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))} · <b>Mode:</b> ${t.ai ? 'AI (' + esc(VO.ai.label()) + ')' : 'Simulasi'}</div>`;
     if (t.note) h += `<div style="color:#ef9a9a">${esc(t.note)}</div>`;
     if (t.result) h += `<h4>🧾 Laporan akhir</h4><div>${ui.md(t.result)}</div>`;
     h += `<h4>👥 Hasil per agen</h4>`;
-    for (const st of t.subtasks) h += `<div class="sub"><b>${esc(st.agentName)}</b> <span style="color:var(--muted)">(${esc(st.role)}) · ${esc(st.status)} ${Math.round((st.progress || 0) * 100)}%</span>\n${ui.md(st.output || '…')}</div>`;
+    for (const st of t.subtasks) h += `<div class="sub"><b>${esc(st.agentName)}</b> <span style="color:var(--muted)">(${esc(st.role)}) · ${esc(st.status)} ${Math.round((st.progress || 0) * 100)}%</span>\n${st.refs && st.refs.length ? `<span style="color:var(--muted)">📚 Referensi: ${st.refs.map(esc).join(', ')}</span>\n` : ''}${st.wait ? esc(st.wait) + '\n' : ''}${ui.md(st.output || '…')}</div>`;
     $('resultBody').innerHTML = h;
     $('resultDlg').showModal();
   };

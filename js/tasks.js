@@ -2,7 +2,7 @@
  * tasks.js — alur kerja hierarkis kantor:
  *   Boss → (rapat) → Direktur Divisi → Lead Departemen → Anggota tim
  * Setiap level: briefing ke atasan, kerja, lalu lapor balik ke atasan.
- * Mode simulasi: progres acak. Mode AI: setiap agent memanggil Claude API.
+ * Mode simulasi: progres acak. Mode AI: setiap agent memanggil Gemini (atau Claude) lewat backend.
  * Juga memetakan event live dari Claude Code hooks menjadi karyawan kantor.
  * ========================================================================= */
 (function () {
@@ -31,7 +31,10 @@
         task.status = 'done';
         task.result = report || task.result;
         task.finished = Date.now();
-        VO.log(S(), `✅ Tugas selesai: "${title}"`);
+        if (task.result) {
+          VO.addDoc(S(), { kind: 'report', title: 'Laporan: ' + title, author: tasks.targetLabel(S(), targetType, targetId), taskId: task.id, content: task.result });
+        }
+        VO.log(S(), `✅ Tugas selesai: "${title}" — laporan disimpan di Gudang Dokumen`);
         sim.say('boss', '👏 Mantap, tim!', 3);
         changed();
       },
@@ -175,7 +178,7 @@
     all.forEach((p) => sim.act(p.id, sim.homeActions(S(), p.id)));
   }
 
-  // Kerja di meja: simulasi atau panggilan Claude API
+  // Kerja di meja: simulasi atau panggilan AI (Gemini / Claude)
   function work(task, ent, prompt) {
     const s = S();
     const sub = { id: VO.uid('st'), agentId: ent.id, agentName: ent.name, role: ent.role, status: 'queued', progress: 0, output: '' };
@@ -185,10 +188,24 @@
     if (task.ai) {
       job.start = () => {
         sub.status = 'working'; changed();
-        VO.ai.run({ model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt }, (_, full) => {
-          sub.output = full;
-          job.progress = Math.min(0.95, 0.08 + full.length / 1800);
-        }).then((full) => { sub.output = full; finish('done'); }, (e) => { sub.output = '⚠️ ' + e.message; finish('failed'); });
+        const q = VO.ai.withDocs(S(), prompt, task.title + ' ' + ent.role, task.id);
+        if (q.docs.length) { sub.refs = q.docs.map((d) => d.title); sim.say(ent.id, '📚 Membaca ' + q.docs.length + ' dokumen', 2.5); }
+        VO.ai.run(
+          { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: q.prompt },
+          (_, full) => {
+            sub.output = full;
+            job.progress = Math.min(0.95, 0.08 + full.length / 1800);
+          },
+          (w) => { sub.wait = w; if (w) sim.say(ent.id, w, 4); changed(); }
+        ).then(
+          (full) => {
+            sub.output = full;
+            const dept = S().departments.find((d) => d.id === ent.deptId);
+            VO.addDoc(S(), { kind: 'work', title: `${task.title} — ${ent.role}`, author: ent.name, authorId: ent.id, deptId: dept?.id, taskId: task.id, content: full });
+            finish('done');
+          },
+          (e) => { sub.output = '⚠️ ' + e.message; finish('failed'); }
+        );
       };
       job.tick = (dt) => { if (job.progress < 0.08) job.progress += dt * 0.01; };
     } else {
@@ -204,6 +221,7 @@
     }
     function finish(st) {
       job.progress = 1; job.done = true;
+      if (st === 'done') VO.remember(VO.findEntity(S(), ent.id), `Tugas "${short(task.title, 60)}": ${String(sub.output).replace(/\s+/g, ' ').slice(0, 300)}`);
       sub.status = st; sub.progress = 1; changed();
       sim.say(ent.id, st === 'done' ? '✅ Bagianku beres!' : '⚠️ Ada kendala', 2.5);
     }
@@ -229,11 +247,13 @@
     if (!task.ai || !stillHere(ent)) return joined;
     sim.say(ent.id, '🧾 Menyusun laporan...', 3);
     try {
-      return await VO.ai.run({
-        model: ent.model,
-        system: VO.ai.systemPrompt(S(), ent),
-        prompt: `${instruction}\n\nTugas awal: ${task.title}\n\nLaporan masuk:\n${joined}`,
-      });
+      const out = await VO.ai.run(
+        { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: `${instruction}\n\nTugas awal: ${task.title}\n\nLaporan masuk:\n${joined}` },
+        null,
+        (w) => w && sim.say(ent.id, w, 4)
+      );
+      VO.remember(VO.findEntity(S(), ent.id), `Merangkum laporan "${short(task.title, 60)}": ${out.replace(/\s+/g, ' ').slice(0, 250)}`);
+      return out;
     } catch (e) {
       return joined + `\n\n_(ringkasan gagal: ${e.message})_`;
     }

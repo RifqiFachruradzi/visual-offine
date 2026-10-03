@@ -95,11 +95,15 @@
     bindEditBar();
     VO.ui.bindTree();
     VO.ui.bindInspector();
+    VO.ui.bindDocs();
     bindTasks();
     syncControls();
 
-    VO.ai.check().then(() => { aiPill(); app._dirty = true; });
-    VO.ai.listen((ev) => VO.live.handle(ev));
+    VO.ai.check().then(() => {
+      aiPill();
+      app._dirty = true;
+      VO.ai.listen((ev) => VO.live.handle(ev)); // hanya aktif di server lokal
+    });
 
     let last = performance.now();
     const loop = (now) => {
@@ -118,6 +122,7 @@
       if (app._dirty) {
         VO.ui.renderTargets();
         VO.ui.renderTasks();
+        VO.ui.renderDocs();
         app._dirty = false;
       }
     }, 300);
@@ -130,11 +135,11 @@
   function aiPill() {
     const p = $('aiStatus');
     const s = app.state;
-    p.textContent = VO.ai.available ? (s.settings.aiMode ? '🧠 Claude API aktif' : '🧠 Claude API siap') : '🎲 Simulasi';
+    p.textContent = VO.ai.available ? (s.settings.aiMode ? `🧠 ${VO.ai.label()} aktif` : `🧠 ${VO.ai.label()} siap`) : '🎲 Simulasi';
     p.title = VO.ai.reason;
     p.classList.toggle('on', VO.ai.available && s.settings.aiMode);
     $('aiMode').disabled = !VO.ai.available;
-    $('aiMode').parentElement.title = VO.ai.available ? 'Gunakan Claude API sungguhan untuk mengerjakan tugas' : VO.ai.reason;
+    $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
   function syncControls() {
@@ -143,6 +148,7 @@
     $('ambient').checked = !!s.settings.ambient;
     $('aiMode').checked = !!s.settings.aiMode && VO.ai.available;
     $('speed').value = String(s.settings.speed || 1);
+    $('rpm').value = String(s.settings.rpm || 10);
     $('floorSel').value = s.settings.floor;
     $('mapW').value = s.map.w;
     $('mapH').value = s.map.h;
@@ -170,8 +176,9 @@
     $('aiMode').onchange = (e) => {
       s().settings.aiMode = e.target.checked;
       aiPill(); app.changed();
-      VO.ui.toast(e.target.checked ? '🧠 Tugas baru akan dikerjakan oleh Claude API' : '🎲 Kembali ke mode simulasi');
+      VO.ui.toast(e.target.checked ? `🧠 Tugas baru akan dikerjakan oleh ${VO.ai.label()}` : '🎲 Kembali ke mode simulasi');
     };
+    $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
     $('btnFit').onclick = () => R.fit($('office'), s());
     $('btnExport').onclick = () => {
@@ -276,7 +283,7 @@
       const [targetType, targetId] = $('taskTarget').value.split(':');
       const t = VO.tasks.create({ title, targetType, targetId });
       $('taskTitle').value = '';
-      VO.ui.toast(t.ai ? '🧠 Tugas dikirim — agen memakai Claude API' : '📋 Tugas dikirim ke tim');
+      VO.ui.toast(t.ai ? `🧠 Tugas dikirim — agen memakai ${VO.ai.label()}` : '📋 Tugas dikirim ke tim');
     });
     $('taskTitle').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('taskForm').requestSubmit();
@@ -286,6 +293,7 @@
         document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === tab));
         $('taskList').classList.toggle('hidden', tab.dataset.tab !== 'tasks');
         $('logList').classList.toggle('hidden', tab.dataset.tab !== 'log');
+        $('docPane').classList.toggle('hidden', tab.dataset.tab !== 'docs');
       })
     );
     $('taskList').addEventListener('click', (e) => {

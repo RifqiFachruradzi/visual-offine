@@ -20,10 +20,15 @@
   VO.HAIRS = ['#2b1d14', '#4a3020', '#7a4a22', '#c9a15b', '#d0d0d0', '#151515', '#a33b20', '#3d2b5c'];
   VO.SHIRTS = ['#4f8cff', '#ff7a59', '#2ec4b6', '#ffbf3c', '#9b5de5', '#f15bb5', '#3a86ff', '#8ac926', '#ef476f', '#118ab2'];
 
+  // Gemini dipakai dulu karena ada free tier. Alias *-latest selalu menunjuk versi terbaru.
+  VO.DEFAULT_MODEL = 'gemini-flash-latest';
   VO.MODELS = [
-    { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
-    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+    { id: 'gemini-flash-latest', label: 'Gemini Flash (gratis)', provider: 'gemini' },
+    { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite (gratis, paling hemat)', provider: 'gemini' },
+    { id: 'gemini-pro-latest', label: 'Gemini Pro (kuota gratis terbatas)', provider: 'gemini' },
+    { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (butuh key Claude)', provider: 'claude' },
+    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (butuh key Claude)', provider: 'claude' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (butuh key Claude)', provider: 'claude' },
   ];
 
   VO.FURNITURE = {
@@ -58,7 +63,7 @@
     id: o.id || VO.uid('ag'),
     name: o.name || VO.randomName(),
     role: o.role || 'Staff',
-    model: o.model || 'claude-opus-5-5',
+    model: o.model || VO.DEFAULT_MODEL,
     prompt: o.prompt || '',
     deptId: o.deptId || null,
     divisionId: o.divisionId || null,
@@ -68,6 +73,7 @@
     hair: o.hair || VO.pick(VO.HAIRS),
     shirt: o.shirt || VO.pick(VO.SHIRTS),
     live: !!o.live,
+    memory: Array.isArray(o.memory) ? o.memory : [],
   });
 
   /* ---------------------------------------------------------------- default */
@@ -75,15 +81,16 @@
     const s = {
       version: 1,
       company: { name: 'Nusantara AI Corp' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1 },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true },
       map: { w: 64, h: 44 },
-      boss: VO.makeAgent({ id: 'boss', name: 'Pak Bos', role: 'CEO', model: 'claude-opus-5-5', shirt: '#1f2430', hair: '#1c1c1c', prompt: 'Kamu CEO perusahaan. Tegas, strategis, fokus pada hasil.' }),
+      boss: VO.makeAgent({ id: 'boss', name: 'Pak Bos', role: 'CEO', model: VO.DEFAULT_MODEL, shirt: '#1f2430', hair: '#1c1c1c', prompt: 'Kamu CEO perusahaan. Tegas, strategis, fokus pada hasil.' }),
       facilities: [],
       divisions: [],
       departments: [],
       agents: [],
       furniture: [],
       tasks: [],
+      docs: [],
       log: [],
     };
     for (const t of ['boss', 'meeting', 'pantry']) VO.addFacility(s, t);
@@ -176,6 +183,49 @@
   VO.log = function (s, text) {
     s.log.unshift({ t: Date.now(), text });
     if (s.log.length > 200) s.log.length = 200;
+  };
+
+  /* ---------------------------------------------------------------- simpanan & gudang dokumen */
+  // Ingatan agen: catatan singkat hasil kerja terakhir, ikut dikirim sebagai konteks AI.
+  VO.MEMORY_MAX = 6;
+  VO.remember = function (agent, text) {
+    if (!agent) return;
+    agent.memory = agent.memory || [];
+    agent.memory.unshift({ t: Date.now(), text: String(text).replace(/[#*`>_]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 400) });
+    agent.memory.length = Math.min(agent.memory.length, VO.MEMORY_MAX);
+  };
+
+  // Gudang dokumen: hasil kerja & laporan + dokumen yang diunggah (basis pengetahuan).
+  VO.DOCS_MAX = 300;
+  VO.addDoc = function (s, d) {
+    const doc = {
+      id: VO.uid('doc'), t: Date.now(), kind: d.kind || 'work', title: String(d.title || 'Tanpa judul').slice(0, 160),
+      author: d.author || '-', authorId: d.authorId || null, deptId: d.deptId || null, taskId: d.taskId || null,
+      content: String(d.content || '').slice(0, 20000),
+    };
+    s.docs.unshift(doc);
+    if (s.docs.length > VO.DOCS_MAX) s.docs.length = VO.DOCS_MAX;
+    return doc;
+  };
+
+  const words = (t) => (String(t).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || []);
+  // Cari dokumen paling relevan (pencocokan kata sederhana, jalan offline)
+  VO.relevantDocs = function (s, query, n = 3, excludeTaskId = null) {
+    const q = new Set(words(query));
+    if (!q.size) return [];
+    return s.docs
+      .filter((d) => d.taskId !== excludeTaskId || !excludeTaskId)
+      .map((d) => {
+        let score = 0;
+        for (const w of words(d.title)) if (q.has(w)) score += 3;
+        for (const w of words(d.content.slice(0, 4000))) if (q.has(w)) score += 1;
+        if (d.kind === 'upload') score *= 1.5;
+        return { d, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n)
+      .map((x) => x.d);
   };
 
   /* ---------------------------------------------------------------- geometri ruangan */
@@ -298,9 +348,16 @@
   VO.migrate = function (s) {
     if (!s || typeof s !== 'object' || !s.boss || !Array.isArray(s.agents)) throw new Error('Format file tidak dikenali');
     const d = VO.defaultState();
-    for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'log']) if (!Array.isArray(s[k])) s[k] = [];
+    const needV2 = !(s.settings && s.settings.modelsV2);
+    for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
+    // v2: pindah ke Gemini (gratis) sebagai model default
+    if (needV2) {
+      for (const a of [s.boss, ...s.agents]) if (String(a.model).startsWith('claude-')) a.model = VO.DEFAULT_MODEL;
+      s.settings.modelsV2 = true;
+    }
+    for (const a of [s.boss, ...s.agents]) if (!Array.isArray(a.memory)) a.memory = [];
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');

@@ -19,8 +19,11 @@
     </div>
     <div class="toolbar">
       <label class="toggle" title="Karyawan bergerak sendiri (ngopi, ngobrol, dll.)"><input type="checkbox" id="ambient" /> Aktivitas otomatis</label>
-      <label class="toggle" title="Gunakan Claude API sungguhan untuk mengerjakan tugas"><input type="checkbox" id="aiMode" /> Mode AI nyata</label>
+      <label class="toggle" title="Agen mengerjakan tugas dengan AI sungguhan (Gemini gratis)"><input type="checkbox" id="aiMode" /> Mode AI nyata</label>
       <span id="aiStatus" class="pill">…</span>
+      <select id="rpm" title="Batas panggilan AI per menit (free tier Gemini ± 10–15/menit)">
+        <option value="5">5/mnt</option><option value="10">10/mnt</option><option value="15">15/mnt</option><option value="30">30/mnt</option><option value="60">60/mnt</option>
+      </select>
       <select id="speed" title="Kecepatan simulasi">
         <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
       </select>
@@ -83,9 +86,18 @@
       <section class="card grow">
         <div class="tabs">
           <button class="tab active" data-tab="tasks">Tugas</button>
+          <button class="tab" data-tab="docs">📚 Dokumen <span id="docCount" class="badge">0</span></button>
           <button class="tab" data-tab="log">Aktivitas</button>
         </div>
         <div id="taskList" class="list"></div>
+        <div id="docPane" class="list hidden">
+          <div class="doc-tools">
+            <input type="text" id="docSearch" placeholder="Cari dokumen…" />
+            <button id="docUpload" class="small" title="Unggah .txt / .md sebagai pengetahuan untuk agen">⬆ Unggah</button>
+            <input type="file" id="docFile" accept=".txt,.md,.markdown,.csv,.json,text/*" multiple hidden />
+          </div>
+          <div id="docList" class="list"></div>
+        </div>
         <div id="logList" class="list hidden"></div>
       </section>
     </aside>

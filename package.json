@@ -1,15 +1,20 @@
 {
   "name": "visual-office",
   "version": "1.0.0",
-  "description": "Visualisasi kantor AI Agent: atur layout kantor, divisi, departemen, boss, dan karyawan agent AI.",
+  "description": "Visualisasi kantor AI Agent (Gemini/Claude): atur layout kantor, divisi, departemen, boss, dan karyawan agent AI.",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check hooks/claude-office-hook.js && for f in js/*.js; do node --check $f || exit 1; done"
+    "check": "node --check server.js && node --check lib/llm.js && node --check api/run.js && node --check api/health.js && node --check hooks/claude-office-hook.js && for f in js/*.js; do node --check $f || exit 1; done"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=20.12"
+  },
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^0.131.0"
+  },
+  "dependencies": {
+    "@google/genai": "^2.27.0"
   }
 }

@@ -154,3 +154,16 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
   .panel.right { order: 3; }
   .topbar { height: auto; flex-wrap: wrap; padding: 8px; }
 }
+
+/* ---------------------------------------------------------------- dokumen & ingatan */
+.doc-tools { display: flex; gap: 6px; }
+.doc-tools input { flex: 1; min-width: 0; }
+.doc { background: #161922; border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; cursor: pointer; }
+.doc:hover { border-color: #4a5166; }
+.doc .t { font-weight: 600; font-size: 12px; }
+.doc .meta { color: var(--muted); font-size: 11px; margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; }
+.kind { font-size: 10px; padding: 0 6px; border-radius: 99px; border: 1px solid var(--line); }
+.kind.report { color: #ffd166; } .kind.work { color: #81d4fa; } .kind.upload { color: #a5d6a7; }
+.memory { margin: 6px 0 10px; font-size: 12px; }
+.memory .m { border-left: 2px solid #4a5166; padding: 2px 8px; margin: 4px 0; color: #c9cdd6; }
+.result code { background: #232733; padding: 0 4px; border-radius: 4px; }
