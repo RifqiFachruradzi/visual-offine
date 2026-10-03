@@ -633,70 +633,135 @@
     const role = String(a.role || '').toLowerCase();
     const accent = a.id === 'boss' ? '#ffca28' : a.top || ORANGE;
     const limb = a.id === 'boss' ? '#3a3f6b' : ORANGE;
-    const sw = o.moving ? Math.sin(o.phase * 13) : 0;
+    const limbDark = shade(limb, 0.82);
+    const t = (o.now || 0) / 1000;
+    let seed = 0; for (const c of String(o.seed || '')) seed = (seed * 31 + c.charCodeAt(0)) % 997;
     const sit = o.sitting;
+    const walk = o.moving ? o.phase * 9.5 : 0; // siklus langkah
+    const step = o.moving ? Math.sin(walk) : 0;
+    const happy = o.happy || 0; // 0..1 selama selebrasi
+    const hop = happy ? Math.sin(happy * Math.PI) * 9 : 0;
+    const breathe = Math.sin(t * 2.1 + seed) * 0.8;
+    const bounce = o.moving ? Math.abs(Math.sin(walk)) * 2.2 : 0;
+    const lift = (sit ? 7 : 0) + bounce + hop;
+
+    // capsule yang berputar di titik sendi; mengembalikan titik ujungnya
+    const seg = (x, y, ang, len, w, col) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+      ctx.fillStyle = col; rr(ctx, -w / 2, -w / 2 + 0.5, w, len + w / 2, w / 2); ctx.fill();
+      ctx.restore();
+      return { x: x - Math.sin(ang) * len, y: y + Math.cos(ang) * len };
+    };
+    const joint = (p, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill(); };
+
     ctx.save();
     if (o.mirror) ctx.scale(-1, 1);
+    // bayangan mengecil saat melompat
     ctx.fillStyle = 'rgba(40,50,120,0.18)';
-    ctx.beginPath(); ctx.ellipse(0, 0, 13, 5, 0, 0, 7); ctx.fill();
-    const lift = sit ? 7 : Math.abs(sw) * 1.4;
+    ctx.beginPath(); ctx.ellipse(0, 0, 13 - hop * 0.4, 5 - hop * 0.15, 0, 0, 7); ctx.fill();
     ctx.translate(0, -lift);
 
-    // kaki
+    // ---- kaki (pinggul → lutut → telapak)
+    const hipY = -19;
     if (!sit) {
-      [[-7, sw], [1.5, -sw]].forEach(([lx, off], i) => {
-        ctx.fillStyle = shade(limb, i ? 0.85 : 1);
-        rr(ctx, lx + 0.5, -17 + off, 5, 10, 2); ctx.fill();
-        ctx.fillStyle = i ? '#e3e5ee' : '#f4f5fa';
-        rr(ctx, lx - 0.5 + off * 1.5, -8, 7.5, 7.5, 2.5); ctx.fill();
-        ctx.fillStyle = '#3a3f55'; ctx.fillRect(lx - 0.5 + off * 1.5, -1.6, 7.5, 1.8);
-      });
+      const legs = [[-3.5, step, true], [3.5, -step, false]];
+      for (const [hx, s, far] of legs) {
+        const thighA = s * 0.55 - (happy ? 0.25 : 0);
+        const kneeA = thighA + Math.max(0, -s) * 0.75 + (happy ? 0.5 : 0); // lutut menekuk saat kaki di belakang
+        const knee = seg(hx, hipY, -thighA, 6.5, 5, far ? limbDark : limb);
+        const foot = seg(knee.x, knee.y, -kneeA * 0.4, 5.5, 4.5, far ? limbDark : limb);
+        ctx.fillStyle = far ? '#dde0ea' : '#f5f6fb';
+        rr(ctx, foot.x - 3.5, foot.y - 2.5, 8.5, 5, 2.4); ctx.fill();
+        ctx.fillStyle = '#3a3f55'; ctx.fillRect(foot.x - 3.5, foot.y + 1.6, 8.5, 1.4);
+      }
     } else {
-      ctx.fillStyle = limb; rr(ctx, -7, -16, 14, 7, 3); ctx.fill();
+      for (const [hx, far] of [[-3.5, true], [3.5, false]]) {
+        const knee = seg(hx, hipY + 1, -Math.PI / 2 + 0.15, 7, 5, far ? limbDark : limb);
+        seg(knee.x, knee.y, 0.1 + Math.sin(t * 1.3 + seed + hx) * 0.08, 5, 4.5, far ? limbDark : limb); // kaki berayun pelan
+      }
     }
-    ctx.fillStyle = '#3a3f55'; rr(ctx, -8, -20, 16, 5, 2); ctx.fill(); // pinggul
 
-    // badan
-    const bt = -37;
-    ctx.fillStyle = '#f6f7fb'; rr(ctx, -10.5, bt, 21, 18, 6); ctx.fill();
-    ctx.fillStyle = 'rgba(60,70,130,0.12)'; rr(ctx, 4.5, bt + 1.5, 6, 15, 4); ctx.fill();
+    // ---- badan (condong ke depan saat berjalan, bernapas saat diam)
+    const lean = o.moving ? 0.08 : 0;
+    ctx.save();
+    ctx.translate(0, hipY);
+    ctx.rotate(lean);
+    ctx.translate(0, -hipY);
+    ctx.fillStyle = '#3a3f55'; rr(ctx, -8, hipY - 2, 16, 5, 2); ctx.fill(); // pinggul
+    const bt = -37 - breathe * 0.4;
+    // lengan belakang (jauh) digambar sebelum badan
+    const typing = o.working;
+    const armBase = (side) => {
+      if (happy) return -2.5 + Math.sin(t * 14 + side) * 0.2; // tangan terangkat
+      if (o.moving) return side * step * 0.7;
+      if (typing) return sit && o.back ? -0.6 : -0.9;
+      return 0.12 * side + Math.sin(t * 1.6 + seed + side) * 0.06;
+    };
+    const elbow = (side) => (typing ? -0.9 + Math.sin(t * 11 + side * 1.7) * 0.25 : o.moving ? -0.35 - Math.max(0, side * step) * 0.4 : -0.15);
+    const drawArm = (sx, side, far) => {
+      const sh = { x: sx, y: bt + 4 };
+      const el = seg(sh.x, sh.y, armBase(side), 6.5, 4.5, far ? limbDark : limb);
+      const hd = seg(el.x, el.y, armBase(side) + elbow(side), 6, 4.2, far ? limbDark : limb);
+      joint(sh, 3.3, far ? limbDark : limb);
+      joint(hd, 2.8, far ? '#dde0ea' : '#f5f6fb');
+    };
+    drawArm(-10.5, -1, true);
+
+    const bg = ctx.createLinearGradient(-10, bt, 10, bt + 18);
+    bg.addColorStop(0, '#ffffff'); bg.addColorStop(1, '#e3e6f1');
+    ctx.fillStyle = bg; rr(ctx, -10.5, bt, 21, 18 + breathe * 0.4, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,50,110,0.10)'; ctx.lineWidth = 1; rr(ctx, -10.5, bt, 21, 18, 7); ctx.stroke();
     if (!o.back) {
       ctx.fillStyle = accent; rr(ctx, -5.5, bt + 4, 11, 8, 2.5); ctx.fill(); // panel dada
-      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(-3.5, bt + 6, 3, 1.6); ctx.fillRect(1, bt + 6, 2.5, 1.6);
+      const pulse = 0.55 + Math.sin(t * (typing ? 8 : 2.5) + seed) * 0.35; // lampu dada berdenyut
+      ctx.fillStyle = `rgba(255,255,255,${pulse.toFixed(2)})`; ctx.beginPath(); ctx.arc(-2, bt + 8, 1.4, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(1, bt + 7.2, 3, 1.5);
     } else {
-      ctx.fillStyle = '#dfe2ee'; rr(ctx, -6, bt + 3, 12, 11, 3); ctx.fill(); // panel punggung
+      ctx.fillStyle = '#dfe2ee'; rr(ctx, -6, bt + 3, 12, 11, 3); ctx.fill();
+      ctx.fillStyle = '#c9cde0'; ctx.fillRect(-3, bt + 6, 6, 1.2); ctx.fillRect(-3, bt + 9, 6, 1.2);
     }
-    // lengan
-    const armSw = o.working ? Math.sin(o.now / 80) * 1.6 : sw * 2.6;
-    for (const [x, d] of [[-14, armSw], [9.5, -armSw]]) {
-      ctx.fillStyle = limb; ctx.beginPath(); ctx.arc(x + 2.2, bt + 3, 3.2, 0, 7); ctx.fill(); // bahu
-      rr(ctx, x, bt + 3 + d, 4.5, 13, 2); ctx.fill();
-      ctx.fillStyle = '#f4f5fa'; ctx.beginPath(); ctx.arc(x + 2.2, bt + 17.5 + d, 2.9, 0, 7); ctx.fill();
-      ctx.fillStyle = limb;
-    }
+    drawArm(10.5, 1, false);
     ctx.fillStyle = '#3a3f55'; ctx.fillRect(-2.5, bt - 3, 5, 4); // leher
 
-    // kepala
+    // ---- kepala: miring pelan, mengangguk saat mengetik, menoleh sesekali
+    const nod = typing ? Math.sin(t * 5.5 + seed) * 0.05 : 0;
+    const tilt = Math.sin(t * 0.8 + seed) * 0.06 + nod + (happy ? Math.sin(t * 12) * 0.1 : 0);
     const hy = bt - 21; // sisi atas kepala
+    ctx.save();
+    ctx.translate(0, bt - 1);
+    ctx.rotate(tilt);
+    ctx.translate(0, -(bt - 1));
     const hg = ctx.createLinearGradient(-12, hy, 12, hy + 20);
-    hg.addColorStop(0, '#ffffff'); hg.addColorStop(1, '#e6e8f2');
-    ctx.fillStyle = hg; rr(ctx, -12, hy, 24, 20, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(40,50,110,0.12)'; ctx.lineWidth = 1; rr(ctx, -12, hy, 24, 20, 6); ctx.stroke();
+    hg.addColorStop(0, '#ffffff'); hg.addColorStop(1, '#e4e7f2');
+    ctx.fillStyle = hg; rr(ctx, -12, hy, 24, 20, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,50,110,0.12)'; rr(ctx, -12, hy, 24, 20, 7); ctx.stroke();
+    ctx.fillStyle = '#d4d8e6'; rr(ctx, -13.5, hy + 7, 3, 7, 1.5); ctx.fill(); // telinga
     if (!o.back) {
       ctx.fillStyle = '#16193a'; rr(ctx, -7.5, hy + 4, 17, 12, 4); ctx.fill(); // layar wajah
-      // mata berkedip (fase acak per robot)
-      let seed = 0; for (const c of String(o.seed || '')) seed = (seed * 31 + c.charCodeAt(0)) % 997;
-      const blink = ((o.now / 1000 + seed) % 4.2) < 0.13;
-      ctx.fillStyle = o.working ? '#7dffb2' : '#8be9ff';
-      if (blink) { ctx.fillRect(-3.5, hy + 10, 4, 1.2); ctx.fillRect(3.5, hy + 10, 4, 1.2); }
-      else { rr(ctx, -3.5, hy + 7, 4, 5.5, 1.2); ctx.fill(); rr(ctx, 3.5, hy + 7, 4, 5.5, 1.2); ctx.fill(); }
+      ctx.fillStyle = 'rgba(139,233,255,0.08)'; rr(ctx, -6.5, hy + 5, 15, 4, 2); ctx.fill(); // kilau layar
+      // mata: berkedip, melirik, senang (^ ^), hijau saat bekerja
+      const blink = ((t + seed) % 4.2) < 0.12;
+      const glanceT = (t + seed * 0.37) % 7;
+      const look = o.moving ? 1.5 : glanceT < 1 ? -1.6 : glanceT < 1.6 ? 1.4 : 0;
+      const eye = o.working ? '#7dffb2' : '#8be9ff';
+      ctx.fillStyle = eye; ctx.strokeStyle = eye; ctx.lineWidth = 1.4;
+      if (happy || o.cheer) {
+        for (const ex of [-1.5, 5.5]) { ctx.beginPath(); ctx.moveTo(ex - 2, hy + 11); ctx.lineTo(ex, hy + 8.5); ctx.lineTo(ex + 2, hy + 11); ctx.stroke(); }
+      } else if (blink) {
+        ctx.fillRect(-3.5 + look, hy + 10, 4, 1.2); ctx.fillRect(3.5 + look, hy + 10, 4, 1.2);
+      } else {
+        rr(ctx, -3.5 + look, hy + 7, 4, 5.5, 1.3); ctx.fill(); rr(ctx, 3.5 + look, hy + 7, 4, 5.5, 1.3); ctx.fill();
+      }
+      if (o.talking) { // gelombang suara saat bicara
+        ctx.fillStyle = eye;
+        for (let k = 0; k < 5; k++) { const h = 0.8 + Math.abs(Math.sin(t * 16 + k * 1.3)) * 2; ctx.fillRect(-3 + k * 2.4, hy + 14.2 - h / 2, 1.3, h); }
+      }
       if (a.glasses) { ctx.strokeStyle = '#8be9ff'; ctx.lineWidth = 0.8; ctx.strokeRect(-4.5, hy + 6, 13, 7.5); }
     } else {
       ctx.fillStyle = '#d9dcea'; rr(ctx, -6, hy + 5, 12, 10, 3); ctx.fill();
     }
-    ctx.fillStyle = '#d4d8e6'; rr(ctx, -13.5, hy + 7, 3, 7, 1.5); ctx.fill(); // telinga
 
-    // aksesori sesuai jabatan
+    // aksesori sesuai jabatan + antena yang bergoyang seperti per
     let topY = hy;
     if (/voice|audio|suara|musik|music|call|support|customer|cs\b|telemarket/.test(role)) {
       ctx.strokeStyle = accent; ctx.lineWidth = 3;
@@ -704,18 +769,25 @@
       ctx.fillStyle = accent; rr(ctx, -15.5, hy + 4, 5, 10, 2); ctx.fill(); rr(ctx, 10.5, hy + 4, 5, 10, 2); ctx.fill();
       topY = hy - 9;
     } else if (/video|film|editor|render|reel|motion|animat/.test(role)) {
+      const spin = t * (o.working ? 4 : 0.8);
       for (const [x, y] of [[-5, hy - 6], [5, hy - 7]]) {
         ctx.fillStyle = '#3a3f55'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, 7); ctx.fill();
-        ctx.fillStyle = '#f4f5fa'; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + Math.cos(k * 1.57) * 2.8, y + Math.sin(k * 1.57) * 2.8, 1.1, 0, 7); ctx.fill(); }
+        ctx.fillStyle = '#f4f5fa';
+        for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + Math.cos(spin + k * 1.57) * 2.8, y + Math.sin(spin + k * 1.57) * 2.8, 1.1, 0, 7); ctx.fill(); }
       }
       topY = hy - 13;
     } else if (a.id !== 'boss') {
+      const wob = Math.sin(t * 3.2 + seed) * 0.18 + (o.moving ? Math.sin(walk * 2) * 0.25 : 0) + (happy ? Math.sin(t * 20) * 0.4 : 0);
+      const tip = { x: Math.sin(wob) * 7, y: hy - Math.cos(wob) * 7 };
       ctx.strokeStyle = '#3a3f55'; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(0, hy - 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.quadraticCurveTo(tip.x * 0.3, hy - 4, tip.x, tip.y); ctx.stroke();
       ctx.fillStyle = a.isDirector ? '#9b5de5' : a.isLead ? '#ffca28' : CORAL;
-      ctx.beginPath(); ctx.arc(0, hy - 7.5, 2.6, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(tip.x, tip.y - 1, 2.6, 0, 7); ctx.fill();
+      if (o.working) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(tip.x - 0.8, tip.y - 1.8, 0.9, 0, 7); ctx.fill(); }
       topY = hy - 10;
     }
+    ctx.restore(); // kepala
+    ctx.restore(); // badan
     ctx.restore();
     return topY - lift;
   }
@@ -743,7 +815,9 @@
     ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
     ctx.scale(1.15, 1.15);
     const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
-    const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id };
+    const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;
+    const talking = !!(rt.bubble && rt.bubble.until > now && now - (rt.bubble.until - 3000) < 1600);
+    const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id, happy, talking, cheer: rt.status === 'chat' };
     const headTop = robot() ? drawRobot(ctx, look, opts) : drawAvatar(ctx, look, opts);
     if (ent.id === 'boss') { // mahkota
       ctx.fillStyle = '#ffca28';

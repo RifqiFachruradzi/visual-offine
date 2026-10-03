@@ -94,8 +94,37 @@
     if (prev[goal] === -1) return null;
     const path = [];
     for (let c = goal; c !== start; c = prev[c]) path.push({ x: c % g.w, y: (c / g.w) | 0 });
-    return path.reverse();
+    return smoothPath(from, path.reverse());
   };
+
+  // Garis pandang bebas halangan antara dua titik tile (sampling tiap 1/4 tile)
+  function clearLine(a, b) {
+    const ax = a.x + 0.5, ay = a.y + 0.5, bx = b.x + 0.5, by = b.y + 0.5;
+    const n = Math.ceil(Math.hypot(bx - ax, by - ay) * 4);
+    for (let i = 1; i < n; i++) {
+      const x = ax + ((bx - ax) * i) / n, y = ay + ((by - ay) * i) / n;
+      // cek juga sedikit ke samping agar badan tidak menyerempet sudut
+      for (const [ox, oy] of [[0, 0], [0.22, 0.22], [-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22]]) {
+        if (blocked(Math.floor(x + ox), Math.floor(y + oy))) return false;
+      }
+    }
+    return true;
+  }
+
+  // "String pulling": lompati titik antara bila jalurnya lurus & bebas → jalan diagonal yang luwes
+  function smoothPath(from, path) {
+    if (path.length < 3) return path;
+    const out = [];
+    let cur = from, i = 0;
+    while (i < path.length) {
+      let j = path.length - 1;
+      while (j > i && !clearLine(cur, path[j])) j--;
+      out.push(path[j]);
+      cur = path[j];
+      i = j + 1;
+    }
+    return out;
+  }
 
   /* ------------------------------------------------------------ runtime entitas */
   const tileOf = (rt) => ({ x: Math.floor(rt.x / T), y: Math.floor(rt.y / T) });

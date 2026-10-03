@@ -239,7 +239,7 @@
     function finish(st) {
       job.progress = 1; job.done = true;
       const r0 = sim.rt.get(ent.id);
-      if (r0) r0.activity = null;
+      if (r0) { r0.activity = null; if (st === 'done') r0.happyUntil = performance.now() + 1400; } // selebrasi kecil
       if (st === 'done') VO.remember(VO.findEntity(S(), ent.id), `Tugas "${short(task.title, 60)}": ${String(sub.output).replace(/\s+/g, ' ').slice(0, 300)}`);
       sub.status = st; sub.progress = 1; changed();
       sim.say(ent.id, st === 'done' ? 'Bagianku beres!' : 'Ada kendala', 2.5, st === 'done' ? 'check' : 'alert');
