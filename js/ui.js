@@ -276,7 +276,10 @@
         h += `<div class="node dept ${isSel('dept', d.id)}" data-kind="dept" data-id="${d.id}">${ni('building')}<span class="name">${esc(d.name)}</span><span class="badge">${ag.length}</span>${acts([['addAgent', 'Rekrut agen', 'plus'], ['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
         for (const a of ag)
           h += `<div class="node agent ${isSel('agent', a.id)}" data-kind="agent" data-id="${a.id}">${a.live ? ni('live', 'live') : a.isLead ? ni('star', 'lead') : ni('bot')}<span class="name">${esc(a.name)} <span class="sub">· ${esc(a.role)}</span></span>${busy(a.id)}${acts([['assign', 'Beri tugas', 'task'], ['edit', 'Edit', 'edit'], ['del', 'Hapus', 'trash']])}</div>`;
+        // tombol yang selalu terlihat (tidak hanya saat hover)
+        h += `<div class="node add agent-add" data-kind="dept" data-id="${d.id}"><button class="link" data-act="addAgent">${VO.icon('plus')} Rekrut karyawan</button></div>`;
       }
+      h += `<div class="node add dept-add" data-kind="division" data-id="${div.id}"><button class="link" data-act="addDept">${VO.icon('plus')} ${depts.length ? 'Tambah departemen' : 'Tambah departemen (wajib sebelum merekrut karyawan)'}</button></div>`;
     }
     if (!s.divisions.length) h += `<p class="empty">Belum ada divisi. Klik <b>Divisi</b> di atas untuk mulai membangun kantor.</p>`;
     h += `<div class="node" style="margin-top:10px;color:var(--muted)" data-kind="none">${ni('door')}<span class="name">Fasilitas</span></div>`;
