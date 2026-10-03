@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { status, handleRun } from '../lib/llm.js';
 import { gate, authConfig } from '../lib/auth.js';
-import { handleLogin, handleLogout, handleMe } from '../lib/session-http.js';
+import { handleLogin, handleLogout, handleMe, handleRegister, handleOffice } from '../lib/session-http.js';
 
 // folder root proyek (file ini ada di local/)
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -74,6 +74,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/login') return handleLogin(req, res);
     if (url.pathname === '/api/logout') return handleLogout(req, res);
     if (url.pathname === '/api/me') return handleMe(req, res);
+    if (url.pathname === '/api/register') return handleRegister(req, res);
+    if (url.pathname === '/api/office') return handleOffice(req, res);
     if (url.pathname === '/api/health') {
       return json(res, 200, { ok: true, ...status(), live: true, host: 'local', listeners: listeners.size });
     }
@@ -105,6 +107,7 @@ server.listen(PORT, HOST, () => {
   const st = status();
   const auth = authConfig();
   console.log(`   Mode AI   : ${st.ai ? '[aktif] ' : '[mati]  '}${st.reason}`);
-  console.log(`   Login     : ${auth.configured ? '[aktif] ' + auth.users.size + ' akun' : '[mati]  set APP_USERNAME & APP_PASSWORD di .env untuk mengunci'}`);
+  const loginTxt = { db: '[aktif] akun di Upstash Redis (daftar/masuk dengan email)', env: '[aktif] ' + auth.users.size + ' akun dari APP_USERNAME/APP_USERS', none: '[mati]  isi KV_REST_API_URL/TOKEN (atau APP_USERNAME & APP_PASSWORD) di .env' }[auth.mode];
+  console.log(`   Login     : ${loginTxt}`);
   console.log(`   Live hook : POST http://localhost:${PORT}/api/event  (lihat README.md)\n`);
 });

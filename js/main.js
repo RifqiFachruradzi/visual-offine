@@ -78,12 +78,25 @@
     // Boss = pengguna yang login. Data kantor disimpan terpisah per akun.
     const me = await VO.ai.me();
     app.user = me && me.user;
-    if (app.user) VO.STORAGE_KEY = 'visual-office:v2:' + app.user.toLowerCase();
+    const storeId = (me && (me.id || me.user)) || '';
+    if (storeId) VO.STORAGE_KEY = 'visual-office:v2:' + storeId.toLowerCase();
     $('who').classList.toggle('hidden', !app.user);
     $('btnLogout').classList.toggle('hidden', !(me && me.authRequired));
 
     let s = VO.load();
-    if (!s) s = VO.defaultState();
+    // Mode database: kantor disimpan per akun di cloud (bisa dibuka di perangkat lain)
+    if (me && me.cloud) {
+      VO.cloud.enabled = true;
+      try {
+        const remote = await VO.cloud.load();
+        if (remote.office) s = VO.migrate({ ...remote.office, docs: remote.docs || [] });
+        else app._saveDirty = true; // akun baru: unggah kantor lokal (atau kosong)
+      } catch (e) {
+        VO.ui.toast(e.message + ' — memakai data lokal', 'alert');
+      }
+      $('who').title = 'Kamu adalah Boss · data tersimpan di cloud';
+    }
+    if (!s) { s = VO.defaultState(); app._saveDirty = true; }
     s.agents = s.agents.filter((a) => !a.live); // sesi live tidak bertahan setelah reload
     app.state = s;
     syncBoss();
@@ -136,9 +149,20 @@
         app._dirty = false;
       }
     }, 300);
+    // simpan lokal tiap 2,5 dtk; ke cloud paling sering tiap 8 dtk (hemat kuota Upstash)
+    let cloudDirty = false, lastCloud = 0;
     setInterval(() => {
-      if (app._saveDirty) { VO.save(app.state); app._saveDirty = false; }
-    }, 2000);
+      if (app._saveDirty) {
+        app._saveDirty = false;
+        cloudDirty = true;
+        VO.save(app.state);
+      }
+      if (VO.cloud.enabled && cloudDirty && Date.now() - lastCloud > 8000) {
+        cloudDirty = false;
+        lastCloud = Date.now();
+        VO.cloud.save(app.state).catch(() => { cloudDirty = true; });
+      }
+    }, 2500);
     window.addEventListener('beforeunload', () => VO.save(app.state));
   }
 
@@ -260,6 +284,7 @@
     app.layoutChanged();
     R.fit($('office'), st);
     VO.save(st);
+    app._saveDirty = true;
   }
 
   /* ------------------------------------------------------------ edit bar */

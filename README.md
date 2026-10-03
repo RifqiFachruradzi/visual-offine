@@ -7,8 +7,8 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 
 | Fitur | Keterangan |
 |---|---|
-| **Login** | Halaman login; semua halaman & API dikunci di sisi server (cookie bertanda tangan + Vercel Middleware). Akun diatur lewat `APP_USERNAME` / `APP_PASSWORD`. |
-| **Kamu = Boss** | Akun yang login otomatis menjadi Boss. Data kantor tersimpan terpisah per akun. |
+| **Daftar & masuk** | Halaman login dengan tab **Masuk / Daftar** (email + kata sandi), seperti SimpananMu & Gudang-Document. Akun disimpan di **Upstash Redis** (hash scrypt, maks. 10 percobaan / 15 menit). Semua halaman & API dikunci di sisi server (cookie bertanda tangan + Vercel Middleware). Opsional: `REGISTER_CODE` (kode undangan) atau `ALLOW_REGISTER=false`. |
+| **Kamu = Boss** | Nama saat mendaftar otomatis menjadi Boss. Kantor, ingatan agen, dan Gudang Dokumen tersimpan **per akun di database**, jadi bisa dibuka dari perangkat mana pun. |
 | **Mulai dari kosong** | Kantor baru hanya berisi Ruang Boss, Ruang Rapat, dan Pantry — cocok untuk demo menambah divisi & karyawan. Tombol **Contoh** memuat kantor contoh, **Kosongkan** mulai dari nol lagi. |
 | **Hierarki kantor** | Kamu (Boss) → Direktur Divisi → Ketua Tim (lead) → Anggota. Setiap level briefing ke atasan, bekerja di mejanya, lalu melapor balik. |
 | **Divisi & Departemen** | Tambah / edit / hapus divisi (zona berwarna) dan departemen (ruangan dengan meja otomatis). |
@@ -20,7 +20,7 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | **Simpanan (ingatan agen)** | Tiap agen mengingat 6 hasil kerja terakhirnya dan memakainya sebagai konteks di tugas berikutnya. Lihat / hapus di Inspector. |
 | **Gudang Dokumen** | Semua laporan & hasil kerja tersimpan otomatis. Unggah file `.txt`/`.md` (SOP, panduan brand, data produk) — agen otomatis membaca dokumen yang relevan dengan tugasnya. Bisa dicari, diunduh `.md`, dihapus. |
 | **Live Claude Code** | Sesi Claude Code-mu muncul sebagai karyawan: menerima prompt dari Boss, memakai tool (Edit, Bash, …) di mejanya, lalu melapor saat selesai. |
-| **Simpan** | Kantor, ingatan, dan dokumen tersimpan otomatis di browser (localStorage, gratis, tanpa database), plus Export / Import file JSON. |
+| **Simpan** | Tersimpan otomatis ke database per akun (tiap ±8 detik) + cache di browser, plus Export / Import file JSON. |
 
 ## Cara menjalankan
 
@@ -43,20 +43,21 @@ Proyek ini siap Vercel tanpa konfigurasi build: file statis + Vercel Functions d
 
 1. Di [vercel.com/new](https://vercel.com/new) → **Import** repo `visual-offine` dari GitHub.
 2. **Framework Preset:** `Other` (sudah dipaksa lewat `vercel.json`). Build Command & Output Directory biarkan default.
-3. **Environment Variables:** tambahkan (centang Production & Preview):
-   - `GEMINI_API_KEY` = kunci dari Google AI Studio
-   - `APP_USERNAME` = nama login kamu (juga jadi nama Boss)
-   - `APP_PASSWORD` = password login
-   - opsional `APP_SECRET` = string acak panjang untuk menandatangani cookie
-4. Klik **Deploy**. Buka URL-nya → pill di bar atas harus menunjukkan **Gemini siap**.
-5. Pilih branch yang dideploy: *Production Branch* default `main`; jika belum ada `main`, set di
+3. **Environment Variables:** tambahkan `GEMINI_API_KEY` = kunci dari Google AI Studio (centang Production & Preview).
+4. **Database akun:** project → **Storage → Create Database → Upstash for Redis → Connect**
+   (bisa juga pakai database Upstash yang sama dengan SimpananMu; data dipisah dengan prefix `visualoffice:`).
+   `KV_REST_API_URL` & `KV_REST_API_TOKEN` terisi otomatis.
+   - opsional `REGISTER_CODE` = kode undangan yang wajib diisi saat daftar
+   - opsional `ALLOW_REGISTER=false` = tutup pendaftaran setelah akunmu dibuat
+5. Klik **Deploy** (atau **Redeploy** bila env/database ditambahkan setelah deploy). Buka URL-nya → pill di bar atas harus menunjukkan **Gemini siap**.
+6. Pilih branch yang dideploy: *Production Branch* default `main`; jika belum ada `main`, set di
    **Settings → Git → Production Branch** atau merge branch ini ke `main`.
 
 Catatan Vercel:
 - Fitur **Live Claude Code** (hooks) hanya tersedia di server lokal, karena butuh koneksi SSE yang terus hidup.
-- Ingatan & dokumen tersimpan di **browser tiap pengguna** (localStorage). Gunakan Export/Import untuk memindahkan antar perangkat.
-- Tanpa `APP_USERNAME`/`APP_PASSWORD`, deployment Vercel **terkunci total** (halaman login menampilkan pesan setup).
-  Login melindungi halaman dan `/api/run`, jadi kuota Gemini hanya bisa dipakai akun yang login.
+- Tanpa database (dan tanpa `APP_USERNAME`/`APP_PASSWORD`), deployment Vercel **terkunci total** — halaman login menampilkan pesan setup.
+- Login melindungi halaman dan `/api/run`. Karena siapa pun bisa mendaftar, pakai `REGISTER_CODE` atau `ALLOW_REGISTER=false` bila kuota Gemini tidak ingin dipakai orang lain.
+- Tanpa database, kamu tetap bisa memakai akun tetap lewat `APP_USERNAME` + `APP_PASSWORD` (tanpa fitur daftar; data hanya di browser).
 
 ### Model & kuota gratis
 | Variabel | Default | Keterangan |
@@ -105,9 +106,12 @@ js/render.js        renderer canvas (lantai, dinding, meja, karakter, balon chat
 js/ui.js            panel organisasi, inspector, daftar tugas, dialog
 js/main.js          bootstrap, game loop, kamera & editor
 lib/llm.js          lapisan LLM bersama (Gemini / Claude), dipakai lokal & Vercel
-api/                Vercel Functions: health, run, login, logout, me
+api/                Vercel Functions: health, run, login, register, logout, me, office
 middleware.js       Vercel Routing Middleware: wajib login untuk semua halaman
 lib/auth.js         sesi login (HMAC, Web Crypto) dipakai middleware, functions & server lokal
+lib/accounts.js     daftar/masuk email + kata sandi (scrypt) di Upstash Redis
+lib/db.js           klien Upstash Redis REST (tanpa SDK)
+js/cloud.js         sinkron kantor & dokumen ke database per akun
 login.html          halaman login
 local/server.js     server lokal: statis + /api/run + jembatan event (SSE)
 vercel.json         konfigurasi Vercel
