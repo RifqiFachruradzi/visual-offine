@@ -30,6 +30,7 @@
       (report) => {
         task.status = 'done';
         task.result = report || task.result;
+        if (!task.ai) task.result = '> Ini hasil **simulasi** (tanpa AI). Aktifkan kotak **AI** di bar atas agar karyawan benar-benar mengerjakan tugas dengan Gemini.\n\n' + task.result;
         task.finished = Date.now();
         if (task.result) {
           VO.addDoc(S(), { kind: 'report', title: 'Laporan: ' + title, author: tasks.targetLabel(S(), targetType, targetId), taskId: task.id, content: task.result });
@@ -109,7 +110,7 @@
     task.status = 'in_progress'; changed();
     sim.say(dir.id, 'Tim ' + div.name + ', ada tugas!', 3, 'megaphone');
     const reps = await Promise.all(depts.map((d) => runDept(task, d, dir.id, false).then((r) => `### ${d.name}\n${r}`)));
-    const out = await summarize(task, dir, reps, `Kamu direktur divisi ${div.name}. Rangkum laporan departemen untuk Boss.`);
+    const out = await summarize(task, dir, reps, `Kamu direktur divisi ${div.name}. Gabungkan hasil semua departemen menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai untuk Boss (jangan hanya meringkas).`);
     await reportTo(dir, superiorId);
     return out;
   }
@@ -130,7 +131,7 @@
       )
     );
     const out = members.length > 1
-      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi satu laporan ringkas.`)
+      ? await summarize(task, lead, outs, `Kamu ${lead.role} yang memimpin tim ${dept.name}. Gabungkan hasil kerja tim menjadi SATU dokumen final yang lengkap, rapi, dan siap dipakai (jangan hanya meringkas).`)
       : outs[0];
     await reportTo(lead, superiorId);
     return out;
@@ -249,7 +250,12 @@
     sim.say(ent.id, 'Menyusun laporan...', 3, 'file');
     try {
       const out = await VO.ai.run(
-        { model: ent.model, system: VO.ai.systemPrompt(S(), ent), prompt: `${instruction}\n\nTugas awal: ${task.title}\n\nLaporan masuk:\n${joined}` },
+        {
+          model: ent.model,
+          system: VO.ai.systemPrompt(S(), ent, true),
+          prompt: `${instruction}\n\nTugas dari Boss: ${task.title}\n\nHasil kerja anggota:\n${joined}\n\nTulis dokumen final dalam markdown: judul, bagian-bagian bernomor, poin-poin, dan tabel bila perlu. Jangan menyebut nama anggota tim di dalam dokumen kecuali relevan.`,
+          long: true,
+        },
         null,
         (w) => w && sim.say(ent.id, w, 4)
       );

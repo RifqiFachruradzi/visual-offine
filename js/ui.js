@@ -448,7 +448,7 @@
     if (!d) return;
     $('resultTitle').textContent = d.title;
     $('resultBody').innerHTML = `<div style="color:var(--muted)">${KIND[d.kind] || d.kind} · ${esc(d.author)} · ${new Date(d.t).toLocaleString('id-ID')}</div>
-      <div class="btns" style="margin:8px 0"><button type="button" class="small" data-doc="download" data-id="${d.id}">${VO.icon('download')} Unduh .md</button><button type="button" class="small danger" data-doc="delete" data-id="${d.id}">${VO.icon('trash')} Hapus</button></div>
+      <div class="btns" style="margin:8px 0"><button type="button" class="small primary" data-doc="pdf" data-id="${d.id}">${VO.icon('download')} Unduh PDF</button><button type="button" class="small" data-doc="download" data-id="${d.id}">${VO.icon('file')} Unduh .md</button><button type="button" class="small danger" data-doc="delete" data-id="${d.id}">${VO.icon('trash')} Hapus</button></div>
       <div>${ui.md(d.content)}</div>`;
     $('resultDlg').showModal();
   };
@@ -468,12 +468,26 @@
       if (n) { VO.log(S(), `${n} dokumen diunggah ke Gudang Dokumen`, 'book'); VO.app.changed(); ui.renderDocs(); ui.toast(`${n} dokumen tersimpan`, 'book'); }
     });
     $('resultBody').addEventListener('click', (e) => {
+      const tp = e.target.closest('[data-task-pdf]');
+      if (tp) {
+        const t = S().tasks.find((x) => x.id === tp.dataset.taskPdf);
+        if (!t) return;
+        const sections = [];
+        if (t.result) sections.push({ heading: 'Laporan akhir', body: t.result });
+        sections.push({ heading: 'Hasil per karyawan', body: t.subtasks.map((st) => `### ${st.agentName} (${st.role})\n${st.output || '-'}`).join('\n\n') });
+        VO.pdf.download({ title: t.title, meta: `Target: ${VO.tasks.targetLabel(S(), t.targetType, t.targetId)} · Mode: ${t.ai ? 'AI' : 'Simulasi'} · ${new Date(t.created).toLocaleString('id-ID')}`, sections })
+          .catch((err) => ui.toast('Gagal membuat PDF: ' + err.message, 'alert'));
+        return;
+      }
       const b = e.target.closest('[data-doc]');
       if (!b) return;
       const s = S();
       const d = s.docs.find((x) => x.id === b.dataset.id);
       if (!d) return;
-      if (b.dataset.doc === 'download') {
+      if (b.dataset.doc === 'pdf') {
+        VO.pdf.download({ title: d.title, meta: `${KIND[d.kind] || d.kind} · ${d.author} · ${new Date(d.t).toLocaleString('id-ID')}`, sections: [{ body: d.content }] })
+          .catch((err) => ui.toast('Gagal membuat PDF: ' + err.message, 'alert'));
+      } else if (b.dataset.doc === 'download') {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([`# ${d.title}\n\n_${d.author} · ${new Date(d.t).toLocaleString('id-ID')}_\n\n${d.content}`], { type: 'text/markdown' }));
         a.download = d.title.replace(/[^\w\- ]+/g, '_').slice(0, 80) + '.md';
@@ -504,6 +518,7 @@
     $('resultTitle').textContent = t.title;
     let h = `<div><b>Status:</b> ${ST_TXT[t.status] || t.status} · <b>Target:</b> ${esc(VO.tasks.targetLabel(s, t.targetType, t.targetId))} · <b>Mode:</b> ${t.ai ? 'AI (' + esc(VO.ai.label()) + ')' : 'Simulasi'}</div>`;
     if (t.note) h += `<div style="color:#ef9a9a">${esc(t.note)}</div>`;
+    h += `<div class="btns" style="margin:8px 0"><button type="button" class="small primary" data-task-pdf="${t.id}">${VO.icon('download')} Unduh PDF</button></div>`;
     if (t.result) h += `<h4>${VO.icon('file')} Laporan akhir</h4><div>${ui.md(t.result)}</div>`;
     h += `<h4>${VO.icon('users')} Hasil per agen</h4>`;
     for (const st of t.subtasks) h += `<div class="sub"><b>${esc(st.agentName)}</b> <span style="color:var(--muted)">(${esc(st.role)}) · ${esc(st.status)} ${Math.round((st.progress || 0) * 100)}%</span>\n${st.refs && st.refs.length ? `<span style="color:var(--muted)">Referensi: ${st.refs.map(esc).join(', ')}</span>\n` : ''}${st.wait ? esc(st.wait) + '\n' : ''}${ui.md(st.output || '…')}</div>`;

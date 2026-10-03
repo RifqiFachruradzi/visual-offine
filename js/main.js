@@ -122,6 +122,12 @@
     syncControls();
 
     VO.ai.check().then(() => {
+      // Gemini tersedia → mode AI aktif otomatis (kecuali Boss pernah mematikannya)
+      if (VO.ai.available && !app.state.settings.aiModeTouched && !app.state.settings.aiMode) {
+        app.state.settings.aiMode = true;
+        $('aiMode').checked = true;
+        app.changed();
+      }
       aiPill();
       app._dirty = true;
       VO.ai.listen((ev) => VO.live.handle(ev)); // hanya aktif di server lokal
@@ -222,6 +228,7 @@
     $('ambient').onchange = (e) => { s().settings.ambient = e.target.checked; app.changed(); };
     $('aiMode').onchange = (e) => {
       s().settings.aiMode = e.target.checked;
+      s().settings.aiModeTouched = true;
       aiPill(); app.changed();
       VO.ui.toast(e.target.checked ? `Tugas baru akan dikerjakan oleh ${VO.ai.label()}` : 'Kembali ke mode simulasi', e.target.checked ? 'sparkles' : 'dice');
     };

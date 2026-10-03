@@ -19,7 +19,7 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | **Mode simulasi** | Jalan tanpa internet/API: karyawan ngopi, ngobrol, brainstorm, dan mengerjakan tugas secara simulasi. |
 | **Mode AI nyata** | Setiap agen benar-benar memanggil **Gemini** (free tier) dengan persona & jabatannya; lead & direktur merangkum laporan timnya, Boss membuat ringkasan eksekutif. Panggilan diantrekan sesuai batas per menit & otomatis dicoba ulang saat kena rate limit. |
 | **Simpanan (ingatan agen)** | Tiap agen mengingat 6 hasil kerja terakhirnya dan memakainya sebagai konteks di tugas berikutnya. Lihat / hapus di Inspector. |
-| **Gudang Dokumen** | Semua laporan & hasil kerja tersimpan otomatis. Unggah file `.txt`/`.md` (SOP, panduan brand, data produk) — agen otomatis membaca dokumen yang relevan dengan tugasnya. Bisa dicari, diunduh `.md`, dihapus. |
+| **Gudang Dokumen** | Semua laporan & hasil kerja tersimpan otomatis. Unggah file `.txt`/`.md` (SOP, panduan brand, data produk) — agen otomatis membaca dokumen yang relevan dengan tugasnya. Bisa dicari, diunduh sebagai **PDF** atau `.md`, dihapus. Laporan tugas juga bisa diunduh PDF langsung dari detail tugas. |
 | **Live Claude Code** | Sesi Claude Code-mu muncul sebagai karyawan: menerima prompt dari Boss, memakai tool (Edit, Bash, …) di mejanya, lalu melapor saat selesai. |
 | **Simpan** | Tersimpan otomatis ke database per akun (tiap ±8 detik) + cache di browser, plus Export / Import file JSON. |
 
@@ -113,6 +113,7 @@ lib/auth.js         sesi login (HMAC, Web Crypto) dipakai middleware, functions 
 lib/accounts.js     daftar/masuk email + kata sandi (scrypt) di Upstash Redis
 lib/db.js           klien Upstash Redis REST (tanpa SDK)
 js/cloud.js         sinkron kantor & dokumen ke database per akun
+js/pdf.js           ekspor dokumen/laporan ke PDF (jsPDF di js/vendor, dimuat saat dibutuhkan)
 login.html          halaman login
 local/server.js     server lokal: statis + /api/run + jembatan event (SSE)
 vercel.json         konfigurasi Vercel

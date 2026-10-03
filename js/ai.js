@@ -45,7 +45,7 @@
 
   ai.label = () => (ai.providers.includes('gemini') ? 'Gemini' : ai.providers.includes('claude') ? 'Claude' : 'AI');
 
-  ai.systemPrompt = function (s, ent) {
+  ai.systemPrompt = function (s, ent, long) {
     const dept = s.departments.find((d) => d.id === ent.deptId);
     const div = s.divisions.find((d) => d.id === ent.divisionId);
     const where = ent.id === 'boss' ? 'CEO / Boss' : [div && 'Divisi ' + div.name, dept && 'Departemen ' + dept.name].filter(Boolean).join(', ');
@@ -55,7 +55,9 @@
       `Jabatan: ${ent.role}${where ? ' (' + where + ')' : ''}.`,
       ent.prompt ? `Instruksi khusus: ${ent.prompt}` : '',
       mem.length ? 'Ingatanmu dari pekerjaan sebelumnya (gunakan bila relevan):\n' + mem.map((m) => '- ' + m.text).join('\n') : '',
-      'Kerjakan bagianmu secara konkret dan ringkas (maksimal ~250 kata), gunakan bahasa Indonesia, format markdown sederhana.',
+      long
+        ? 'Tulis hasil akhir yang lengkap dan profesional dalam bahasa Indonesia, format markdown (judul, sub-judul bernomor, poin, tabel bila perlu).'
+        : 'Kerjakan bagianmu secara konkret dan ringkas (maksimal ~300 kata), gunakan bahasa Indonesia, format markdown sederhana.',
     ].filter(Boolean).join('\n');
   };
 
@@ -68,11 +70,11 @@
   };
 
   /* ------------------------------------------------------------ satu panggilan */
-  async function runOnce({ model, system, prompt }, onText) {
+  async function runOnce({ model, system, prompt, long }, onText) {
     const r = await fetch('/api/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, system, prompt }),
+      body: JSON.stringify({ model, system, prompt, long: !!long }),
     });
     if (r.status === 401) { location.href = '/login.html'; throw new Error('Sesi login habis'); }
     if (!r.ok || !r.body) {
