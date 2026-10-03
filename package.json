@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js && node --check lib/llm.js && node --check api/run.js && node --check api/health.js && node --check hooks/claude-office-hook.js && for f in js/*.js; do node --check $f || exit 1; done"
+    "start": "node local/server.js",
+    "check": "node --check local/server.js && node --check lib/llm.js && node --check api/run.js && node --check api/health.js && node --check hooks/claude-office-hook.js && for f in js/*.js; do node --check $f || exit 1; done"
   },
   "engines": {
     "node": ">=20.12"

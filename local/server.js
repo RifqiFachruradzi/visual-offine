@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* =========================================================================
- * server.js — server lokal opsional untuk Visual Office (tanpa dependency
+ * local/server.js — server lokal opsional untuk Visual Office (tanpa dependency
  * wajib). Fungsi:
  *   1. Menyajikan file statis (index.html, js/, css/).
  *   2. POST /api/run    → menjalankan satu agent memakai Gemini (gratis,
@@ -8,15 +8,19 @@
  *   3. POST /api/event  → menerima event dari Claude Code hooks,
  *      GET  /api/events → menyiarkannya ke browser (Server-Sent Events).
  *
+ * Catatan: sengaja TIDAK diletakkan di root sebagai server.js, karena Vercel
+ * akan mendeteksinya sebagai entrypoint server dan tidak menyajikan file statis.
+ *
  * Jalankan:  npm start        (default port 4317, ubah dengan PORT=xxxx)
  * ========================================================================= */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { status, handleRun } from './lib/llm.js';
+import { status, handleRun } from '../lib/llm.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+// folder root proyek (file ini ada di local/)
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // baca .env bila ada (Node 20.12+)
 try { process.loadEnvFile(path.join(here, '.env')); } catch { /* tidak ada .env */ }
 const PORT = Number(process.env.PORT || 4317);

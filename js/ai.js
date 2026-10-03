@@ -1,5 +1,5 @@
 /* =========================================================================
- * ai.js — jembatan ke backend (server.js lokal ATAU Vercel Functions):
+ * ai.js — jembatan ke backend (local/server.js ATAU Vercel Functions):
  *   - /api/health  : cek apakah mode AI (Gemini / Claude) tersedia
  *   - /api/run     : jalankan satu agent (streaming SSE)
  *   - /api/events  : event live dari Claude Code hooks (hanya server lokal)

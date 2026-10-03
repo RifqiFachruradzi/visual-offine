@@ -39,7 +39,7 @@ Lalu centang **Mode AI nyata** di bar atas. Tanpa API key, aplikasi tetap jalan 
 Proyek ini siap Vercel tanpa konfigurasi build: file statis + Vercel Functions di `api/` (`api/health.js`, `api/run.js`).
 
 1. Di [vercel.com/new](https://vercel.com/new) → **Import** repo `visual-offine` dari GitHub.
-2. **Framework Preset:** `Other`. Build Command & Output Directory biarkan kosong/default.
+2. **Framework Preset:** `Other` (sudah dipaksa lewat `vercel.json`). Build Command & Output Directory biarkan default.
 3. **Environment Variables:** tambahkan `GEMINI_API_KEY` = kunci dari Google AI Studio (centang Production & Preview).
 4. Klik **Deploy**. Buka URL-nya → pill di bar atas harus menunjukkan **🧠 Gemini siap**.
 5. Pilih branch yang dideploy: *Production Branch* default `main`; jika belum ada `main`, set di
@@ -98,7 +98,7 @@ js/ui.js            panel organisasi, inspector, daftar tugas, dialog
 js/main.js          bootstrap, game loop, kamera & editor
 lib/llm.js          lapisan LLM bersama (Gemini / Claude), dipakai lokal & Vercel
 api/                Vercel Functions: health, run
-server.js           server lokal: statis + /api/run + jembatan event (SSE)
+local/server.js     server lokal: statis + /api/run + jembatan event (SSE)
 vercel.json         konfigurasi Vercel
 hooks/              hook Claude Code → Visual Office
 ```
