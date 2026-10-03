@@ -15,7 +15,8 @@
       result: String(t.result || '').slice(0, 8000),
       subtasks: t.subtasks.map((st) => ({ ...st, output: String(st.output || '').slice(0, 3000) })),
     }));
-    return { ...s, docs: [], tasks, log: s.log.slice(0, 80) };
+    const trimChat = (a) => (a.chat ? { ...a, chat: a.chat.slice(-20).map((m) => ({ ...m, text: String(m.text).slice(0, 1500) })) } : a);
+    return { ...s, docs: [], tasks, log: s.log.slice(0, 80), boss: trimChat(s.boss), agents: s.agents.map(trimChat) };
   }
 
   cloud.load = async function () {

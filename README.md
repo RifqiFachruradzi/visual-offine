@@ -13,6 +13,8 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | **Mulai dari kosong** | Kantor baru hanya berisi Ruang Boss, Ruang Rapat, dan Pantry — cocok untuk demo menambah divisi & karyawan. Tombol **Contoh** memuat kantor contoh, **Kosongkan** mulai dari nol lagi. |
 | **Hierarki kantor** | Kamu (Boss) → Direktur Divisi → Ketua Tim (lead) → Anggota. Setiap level briefing ke atasan, bekerja di mejanya, lalu melapor balik. |
 | **Divisi & Departemen** | Tambah / edit / hapus divisi (zona berwarna) dan departemen (ruangan dengan meja otomatis). |
+| **Tampilan Modern (default)** | Kantor terbuka yang terang: lantai putih, sekat rendah & tiang tipis, meja putih, nama tim dicat di lantai, dan kartu nama melayang (nama + jabatan) di atas tiap karyawan. Tombol bulan/matahari di bar atas berganti ke tampilan **Pixel** (gelap, gaya Habbo). |
+| **Chat dengan karyawan** | Klik karyawan → panel chat. Jawaban dari Gemini sesuai persona, ingatan, dan dokumen relevan; karyawan departemen Gudang menjawab dari data Gudang-Document. Riwayat chat tersimpan per karyawan. |
 | **Karakter gaya Habbo** | Karyawan isometrik dengan gaya pakaian (jas & dasi, kemeja & dasi, cardigan & rok), 6 model rambut, kacamata, kumis, dan warna yang bisa diatur. Boss memakai mahkota. |
 | **Agen AI** | Nama, jabatan, model (**Gemini Flash / Flash-Lite / Pro** — gratis; Claude opsional), *system prompt* / kepribadian, warna baju-rambut-kulit, pindah departemen, jadikan lead. |
 | **Editor layout** | Geser ruangan & zona, ubah ukuran (pojok kanan-bawah), tambah Ruang Rapat / Pantry / Lounge, taruh furnitur (tanaman, sofa, rak buku, whiteboard, dispenser, printer, server, arcade), ganti lantai, ukuran peta, **Tata Otomatis**. |
@@ -116,6 +118,7 @@ lib/db.js           klien Upstash Redis REST (tanpa SDK)
 lib/gudang.js       baca data Gudang-Document (hanya baca) untuk departemen Gudang
 js/gudang.js        template departemen Gudang + data sebagai konteks tugas agen
 js/cloud.js         sinkron kantor & dokumen ke database per akun
+js/chat.js          panel chat dengan karyawan (Gemini)
 js/pdf.js           ekspor dokumen/laporan ke PDF (jsPDF di js/vendor, dimuat saat dibutuhkan)
 login.html          halaman login
 local/server.js     server lokal: statis + /api/run + jembatan event (SSE)

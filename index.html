@@ -27,6 +27,7 @@
       <select id="speed" title="Kecepatan simulasi">
         <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
       </select>
+      <button id="btnTheme" title="Ganti tampilan: Modern (terang) / Pixel (gelap)"><i data-icon="moon"></i></button>
       <button id="btnFit" title="Tampilkan seluruh kantor (F)"><i data-icon="maximize"></i></button>
       <button id="btnExport" title="Simpan ke file JSON"><i data-icon="download"></i><span class="lbl-wide"> Export</span></button>
       <button id="btnImport" title="Muat dari file JSON"><i data-icon="upload"></i><span class="lbl-wide"> Import</span></button>
@@ -71,6 +72,19 @@
           <input type="number" id="mapW" min="30" max="160" title="Lebar (tile)" />×<input type="number" id="mapH" min="20" max="120" title="Tinggi (tile)" />
           <button id="btnAuto" class="small primary" title="Susun ulang semua ruangan otomatis"><i data-icon="wand"></i> Tata Otomatis</button>
         </div>
+      </div>
+      <div id="chat" class="chat hidden" aria-live="polite">
+        <div class="chat-head">
+          <img id="chatImg" alt="" />
+          <div class="who2"><div class="n" id="chatName"></div><div class="r" id="chatRole"></div></div>
+          <button class="icon" id="chatClose" title="Tutup chat"><i data-icon="x"></i></button>
+        </div>
+        <div class="chat-body" id="chatBody"></div>
+        <div class="chat-note" id="chatNote"></div>
+        <form class="chat-foot" id="chatForm">
+          <textarea id="chatInput" placeholder="Tulis pesan… (Enter untuk kirim)"></textarea>
+          <button class="primary" type="submit" title="Kirim"><i data-icon="send"></i></button>
+        </form>
       </div>
       <div id="emptyStage" class="empty-stage hidden">
         <div class="box">
@@ -146,6 +160,7 @@
   <script src="js/cloud.js"></script>
   <script src="js/pdf.js"></script>
   <script src="js/gudang.js"></script>
+  <script src="js/chat.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/render.js"></script>
   <script src="js/ui.js"></script>

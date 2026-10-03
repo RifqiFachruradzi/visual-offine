@@ -195,8 +195,17 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
+  function applyTheme() {
+    const m = (app.state.settings.theme || 'modern') === 'modern';
+    document.body.classList.toggle('light', m);
+    const b = $('btnTheme');
+    b.innerHTML = VO.icon(m ? 'moon' : 'sun');
+    b.title = m ? 'Ganti ke tampilan Pixel (gelap)' : 'Ganti ke tampilan Modern (terang)';
+  }
+
   function syncControls() {
     const s = app.state;
+    applyTheme();
     $('companyName').value = s.company.name;
     $('ambient').checked = !!s.settings.ambient;
     $('aiMode').checked = !!s.settings.aiMode && VO.ai.available;
@@ -235,6 +244,14 @@
     $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
     $('btnFit').onclick = () => R.fit($('office'), s());
+    $('btnTheme').onclick = () => {
+      const st = s().settings;
+      st.theme = (st.theme || 'modern') === 'modern' ? 'pixel' : 'modern';
+      applyTheme();
+      R.staticDirty = true;
+      app.changed();
+      VO.ui.toast(st.theme === 'modern' ? 'Tampilan Modern (terang)' : 'Tampilan Pixel (gelap)', st.theme === 'modern' ? 'sun' : 'moon');
+    };
     $('btnExport').onclick = () => {
       const blob = new Blob([JSON.stringify(s(), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -276,7 +293,7 @@
       if (e.key === 'e' || e.key === 'E') setMode(!app.ui.edit);
       if (e.key === 'v' || e.key === 'V') setMode(false);
       if (e.key === 'f' || e.key === 'F') R.fit($('office'), app.state);
-      if (e.key === 'Escape') app.select(null);
+      if (e.key === 'Escape') { app.select(null); VO.chat.close(); }
       if (e.key === 'Delete' && app.sel && app.sel.id !== 'boss') VO.ui.remove(app.sel.kind, app.sel.id);
     });
   }
@@ -479,7 +496,11 @@
   function clickSelect(w) {
     const s = app.state;
     const p = R.hitPerson(s, w.x, w.y);
-    if (p) return app.select({ kind: 'agent', id: p.id });
+    if (p) {
+      app.select({ kind: 'agent', id: p.id });
+      if (p.id !== 'boss') VO.chat.open(p.id); // klik karyawan = buka chat
+      return;
+    }
     const hit = hitTest(s, w.x, w.y);
     if (hit && ['dept', 'facility', 'division'].includes(hit.kind)) return app.select({ kind: hit.kind, id: hit.obj.id });
     app.select(null);

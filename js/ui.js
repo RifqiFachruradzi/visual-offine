@@ -352,6 +352,7 @@
         ${a.memory && a.memory.length ? `<div class="memory"><b>${VO.icon('brain')} Ingatan (${a.memory.length})</b>${a.memory.map((m) => `<div class="m">${esc(m.text)}</div>`).join('')}</div>` : ''}
         <div class="btns">
           <button class="small" data-i="edit">${VO.icon('edit')} Edit</button>
+          ${a.id !== 'boss' ? `<button class="small primary" data-i="chat">${VO.icon('chat')} Chat</button>` : ''}
           ${a.id !== 'boss' ? `<button class="small" data-i="assign">${VO.icon('task')} Beri tugas</button>` : ''}
           ${a.deptId && !a.isLead && !a.live ? `<button class="small" data-i="lead">${VO.icon('star')} Jadikan lead</button>` : ''}
           ${a.memory && a.memory.length ? `<button class="small" data-i="forget">${VO.icon('eraser')} Lupakan</button>` : ''}
@@ -392,6 +393,7 @@
       if (i === 'edit') ({ agent: ui.editEntity, division: ui.editDivision, dept: ui.editDept, facility: ui.editFacility })[sel.kind](sel.id);
       if (i === 'del') ui.remove(sel.kind, sel.id);
       if (i === 'lead') ui.makeLead(sel.id);
+      if (i === 'chat') VO.chat.open(sel.id);
       if (i === 'forget') { const a = VO.findEntity(S(), sel.id); a.memory = []; VO.app.changed(); ui.toast('Ingatan ' + a.name + ' dihapus', 'eraser'); }
       if (i === 'addAgent') ui.addAgent(sel.id);
       if (i === 'gudangTest') {
