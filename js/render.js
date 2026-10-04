@@ -251,12 +251,16 @@
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
     };
     for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.07));
-    const FAC = { boss: '#7d5032', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a', billiard: '#6f4a2f' };
+    const FAC = { boss: 'tech', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a', billiard: '#6f4a2f' };
     for (const f of s.facilities) setRect(f, FAC[f.type] || LX.woodA);
     const marble = new Set();
     for (let y = 0; y < s.map.h; y++)
       for (let x = 0; x < s.map.w; x++) {
         const c = tint.get(x + ',' + y);
+        if (c === 'tech') { // lantai panel gelap dengan garis cahaya
+          poly(ctx, diamond(x, y), (x + y) % 2 ? '#161b27' : '#141924', 'rgba(53,224,255,0.12)');
+          continue;
+        }
         if (c === 'marble') {
           marble.add(x + ',' + y);
           poly(ctx, diamond(x, y), (x + y) % 2 ? '#ece6dc' : '#ddd4c6', 'rgba(120,100,80,0.12)');
@@ -286,7 +290,12 @@
     for (const d of s.departments) rug(d.room.x + 0.7, d.room.y + 1.3, d.room.w - 1.4, d.room.h - 2, LX.rug, LX.rugEdge);
     for (const div of s.divisions) rug(div.directorDesk.x - 1.4, div.directorDesk.y - (VO.openPlan(s) ? 1.5 : 0.4), 3.8, 2.9, '#33283e', '#5b4870');
     for (const f of s.facilities) {
-      if (f.type === 'boss') rug(f.x + 1.6, f.y + 1.6, f.w - 3.2, f.h - 3, '#5e2229', LX.gold);
+      if (f.type === 'boss') { // garis cahaya cyan di lantai mengelilingi area kerja Boss
+        ctx.save(); ctx.shadowColor = '#35e0ff'; ctx.shadowBlur = 8; ctx.lineWidth = 2;
+        poly(ctx, diamond(f.x + 1.5, f.y + 1.5, f.w - 3, f.h - 2.6), null, 'rgba(53,224,255,0.75)');
+        ctx.lineWidth = 1; poly(ctx, diamond(f.x + 1.8, f.y + 1.8, f.w - 3.6, f.h - 3.2), null, 'rgba(53,224,255,0.3)');
+        ctx.restore();
+      }
       if (f.type === 'lounge') rug(f.x + 1.5, f.y + 1.5, f.w - 3, f.h - 3, '#d8c6a4', '#b89f76');
       if (f.type === 'billiard') { const b = VO.billiardTable(f); rug(b.x - 1.2, b.y - 1.2, b.w + 2.4, b.h + 2.4, '#3b2230', LX.gold); }
     }
@@ -516,24 +525,7 @@
 
   function facilityProps(s, f, add) {
     if (f.type === 'boss') {
-      const seat = VO.bossSeat(s);
-      const dx = seat.desk.x, dy = seat.desk.y;
-      for (let i = -1; i <= 1; i++)
-        add(dx + i + dy + 1, (ctx) => {
-          const b = box(ctx, dx + i + (i === -1 ? 0.05 : 0), dy + 0.12, dx + i + 1 - (i === 1 ? 0.05 : 0), dy + 0.88, 0, 17, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : { top: '#6b4429', left: '#4a2c1a', right: '#3a2214' });
-          facePanel(ctx, b.fL, 0, 1, 0.82, 0.9, '#d4a843');
-          if (i === 0) { // dokumen & pena di atas meja
-            poly(ctx, diamond(dx + 0.3, dy + 0.3, 0.35, 0.3, 17), '#f5f5f5');
-          }
-          if (i === 1) { // lampu meja
-            const p = iso(dx + 1.5, dy + 0.4, 17);
-            ctx.fillStyle = '#2e7d32'; ctx.beginPath(); ctx.arc(p.x, p.y - 5, 5, 0, 7); ctx.fill();
-          }
-        });
-      // kursi boss (sandaran di belakang, boss menghadap ke depan)
-      add(seat.chair.x + seat.chair.y + 0.8, (ctx) => drawExecChair(ctx, seat.chair.x, seat.chair.y));
-      add(f.x + 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 }));
-      add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
+      bossProps(s, f, add);
     } else if (f.type === 'meeting') {
       const t = VO.meetingTable(f);
       for (let y = t.y; y < t.y + t.h; y++)
@@ -603,6 +595,132 @@
   function drawExecChair(ctx, cx, cy) {
     box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : classic() ? CL.chairBack : luxe() ? '#1b1d22' : '#3b2418');
     box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : luxe() ? '#26282f' : '#5a3826');
+  }
+
+  /* ---------- Ruang Boss berteknologi: meja kaca gelap ber-LED, hologram, video wall ---------- */
+  const CY = '#35e0ff';
+  function bossProps(s, f, add) {
+    const seat = VO.bossSeat(s);
+    const dx = seat.desk.x, dy = seat.desk.y;
+    const TOP = robot() ? '#ffffff' : '#1d2330', SIDE_L = robot() ? NAVY : '#141924', SIDE_R = robot() ? '#1f2aa8' : '#0f131c';
+    for (let i = -1; i <= 1; i++)
+      add(dx + i + dy + 1, (ctx, now) => {
+        const x0 = dx + i + (i === -1 ? 0.05 : 0), x1 = dx + i + 1 - (i === 1 ? 0.05 : 0);
+        // kaki logam ramping di ujung meja
+        if (i !== 0) box(ctx, i === -1 ? x0 + 0.08 : x1 - 0.2, dy + 0.3, i === -1 ? x0 + 0.2 : x1 - 0.08, dy + 0.7, 0, 12, '#3a4150', { outline: false });
+        const b = box(ctx, x0, dy + 0.14, x1, dy + 0.86, 12, 6, { top: TOP, left: SIDE_L, right: SIDE_R }, { outline: false });
+        const pulse = 0.65 + Math.sin(now / 500) * 0.35;
+        ctx.save(); ctx.globalAlpha = pulse;
+        facePanel(ctx, b.fL, 0, 1, 0.1, 0.32, CY); // strip LED depan
+        if (i === 1) facePanel(ctx, b.fR, 0, 1, 0.1, 0.32, CY);
+        ctx.restore();
+        poly(ctx, diamond(x0 + 0.04, dy + 0.18, x1 - x0 - 0.08, 0.64, 18), 'rgba(120,200,255,0.08)'); // kilau kaca
+        if (i === -1) { // keyboard tipis & tablet
+          poly(ctx, diamond(dx + 0.45, dy + 0.42, 0.4, 0.16, 18), '#2b3242');
+          poly(ctx, diamond(dx - 0.75, dy + 0.35, 0.3, 0.35, 18), '#0e1320');
+          poly(ctx, diamond(dx - 0.72, dy + 0.38, 0.24, 0.29, 18), alpha(CY, 0.35));
+        }
+        if (i === 1) { // globe hologram berputar
+          const g = iso(dx + 1.5, dy + 0.5, 18);
+          ctx.fillStyle = '#2b3242'; ctx.beginPath(); ctx.ellipse(g.x, g.y, 7, 3.5, 0, 0, 7); ctx.fill();
+          ctx.fillStyle = alpha(CY, 0.8); ctx.beginPath(); ctx.ellipse(g.x, g.y - 1, 4.5, 2, 0, 0, 7); ctx.fill();
+          const cyy = g.y - 16, r = 9;
+          const gl = ctx.createRadialGradient(g.x, cyy, 0, g.x, cyy, 16);
+          gl.addColorStop(0, alpha(CY, 0.35)); gl.addColorStop(1, alpha(CY, 0));
+          ctx.fillStyle = gl; ctx.fillRect(g.x - 16, cyy - 16, 32, 32);
+          ctx.strokeStyle = alpha(CY, 0.85); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(g.x, cyy, r, 0, 7); ctx.stroke();
+          for (let k = 0; k < 3; k++) { // meridian berputar
+            const w = Math.abs(Math.cos(now / 900 + k * 1.05)) * r;
+            ctx.beginPath(); ctx.ellipse(g.x, cyy, w, r, 0, 0, 7); ctx.stroke();
+          }
+          ctx.beginPath(); ctx.ellipse(g.x, cyy, r, r * 0.35, 0, 0, 7); ctx.stroke();
+        }
+      });
+    // kursi eksekutif
+    add(seat.chair.x + seat.chair.y + 0.8, (ctx) => drawExecChair(ctx, seat.chair.x, seat.chair.y));
+    // layar hologram melayang di depan meja (dashboard untuk Boss)
+    add(dx + dy + 5.0, (ctx, now, st) => {
+      if (FLAT) return;
+      const hx0 = dx - 0.55, hx1 = dx + 1.55, hy = dy + 0.55;
+      const f2 = [iso(hx0, hy, 30), iso(hx1, hy, 30), iso(hx1, hy, 66), iso(hx0, hy, 66)];
+      const flick = 0.85 + Math.sin(now / 130) * 0.05;
+      ctx.save(); ctx.globalAlpha = flick;
+      poly(ctx, f2, alpha(CY, 0.1), alpha(CY, 0.7));
+      // garis proyeksi dari meja
+      ctx.strokeStyle = alpha(CY, 0.25); ctx.beginPath();
+      const base = iso(dx + 0.5, dy + 0.5, 18);
+      ctx.moveTo(base.x, base.y); ctx.lineTo(f2[0].x, f2[0].y); ctx.moveTo(base.x, base.y); ctx.lineTo(f2[1].x, f2[1].y); ctx.stroke();
+      // grafik batang & garis bergerak
+      for (let k = 0; k < 6; k++) {
+        const h = 0.2 + (Math.sin(now / 700 + k * 1.3) + 1) * 0.25;
+        facePanel(ctx, f2, 0.08 + k * 0.08, 0.13 + k * 0.08, 0.12, 0.12 + h * 0.7, alpha(CY, 0.55));
+      }
+      ctx.strokeStyle = '#9ff3ff'; ctx.lineWidth = 1.2; ctx.beginPath();
+      for (let k = 0; k <= 10; k++) { const p = onFace(f2, 0.58 + k * 0.035, 0.35 + Math.sin(now / 600 + k * 0.8) * 0.18 + k * 0.03); k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      ctx.stroke(); ctx.lineWidth = 1;
+      const busy = st.agents.filter((a) => VO.sim.isBusy(a.id)).length;
+      faceText(ctx, f2, 0.56, 0.82, `${busy}/${st.agents.length} AKTIF`, 'bold 7px Inter, system-ui, sans-serif', '#d8fbff', 80);
+      ctx.restore();
+    });
+    // video wall di dinding belakang: dashboard kantor real-time
+    const vx0 = seat.chair.x - 3, vx1 = seat.chair.x + 2;
+    add(seat.chair.x + seat.chair.y + 0.95, (ctx, now, st) => drawVideoWall(ctx, vx0, f.y + 0.97, vx1 - vx0, st, now));
+    // server rack berkedip di pojok kiri & tanaman di kanan
+    add(f.x + 1.5 + f.y + 1.5, (ctx, now) => drawServerRack(ctx, f.x + 1, f.y + 1, now));
+    add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
+  }
+
+  function drawVideoWall(ctx, x, y, w, s, now) {
+    const b = box(ctx, x, y, x + w, y + 0.05, 18, 50, '#07090f', { outline: false });
+    const done = s.tasks.filter((t) => t.status === 'done').length;
+    const busy = s.agents.filter((a) => VO.sim.isBusy(a.id)).length;
+    const active = s.tasks.find((t) => !['done', 'failed'].includes(t.status));
+    // 3 panel: KPI · grafik · jam
+    const P = [[0.02, 0.32], [0.34, 0.66], [0.68, 0.98]];
+    P.forEach(([u0, u1], i) => facePanel(ctx, b.fL, u0, u1, 0.05, 0.95, ['#0c1a2e', '#0a1424', '#0c1a2e'][i]));
+    const glow = 0.85 + Math.sin(now / 900) * 0.15;
+    // grafik area di panel tengah
+    ctx.save(); ctx.globalAlpha = glow;
+    ctx.beginPath();
+    for (let k = 0; k <= 16; k++) {
+      const u = 0.36 + k * (0.28 / 16), v = 0.18 + 0.35 * (0.5 + 0.5 * Math.sin(now / 1200 + k * 0.7)) * (0.6 + k / 40);
+      const p = onFace(b.fL, u, v); k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+    }
+    const e1 = onFace(b.fL, 0.64, 0.1), e0 = onFace(b.fL, 0.36, 0.1);
+    ctx.lineTo(e1.x, e1.y); ctx.lineTo(e0.x, e0.y); ctx.closePath();
+    ctx.fillStyle = alpha(CY, 0.25); ctx.fill();
+    ctx.strokeStyle = CY; ctx.lineWidth = 1.3; ctx.stroke(); ctx.lineWidth = 1;
+    for (let k = 0; k < 8; k++) facePanel(ctx, b.fL, 0.05 + k * 0.032, 0.07 + k * 0.032, 0.1, 0.12 + ((Math.sin(now / 800 + k) + 1) / 2) * 0.16, k % 2 ? '#ff6fb1' : '#7cf29a');
+    ctx.restore();
+    if (FLAT) return; // teks hanya di tampilan 3D
+    const px = w * 32;
+    const F = (sz) => `bold ${sz}px Inter, system-ui, sans-serif`;
+    faceText(ctx, b.fL, 0.04, 0.84, 'TUNTAS', F(5.5), '#7fb2ff');
+    faceText(ctx, b.fL, 0.04, 0.5, String(done), F(14), '#ffffff', px * 0.14);
+    faceText(ctx, b.fL, 0.19, 0.84, 'SIBUK', F(5.5), '#7fb2ff');
+    faceText(ctx, b.fL, 0.19, 0.5, `${busy}`, F(14), '#7cf29a', px * 0.13);
+    faceText(ctx, b.fL, 0.37, 0.84, active ? 'SEDANG BERJALAN' : 'KINERJA KANTOR', F(6), '#ffb347', px * 0.27);
+    faceText(ctx, b.fL, 0.37, 0.7, active ? active.title : (s.company && s.company.name) || 'Kantor AI', F(8), '#ffd27a', px * 0.27);
+    const d = new Date();
+    faceText(ctx, b.fL, 0.71, 0.84, d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase(), F(6), '#7fb2ff', px * 0.28);
+    faceText(ctx, b.fL, 0.71, 0.42, d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), F(14), '#ffffff', px * 0.28);
+    faceText(ctx, b.fL, 0.71, 0.16, VO.ai && VO.ai.available ? '● AI ONLINE' : '○ MODE SIMULASI', F(6), VO.ai && VO.ai.available ? '#7cf29a' : '#9aa3b8', px * 0.26);
+  }
+
+  function drawServerRack(ctx, x, y, now) {
+    const b = box(ctx, x + 0.15, y + 0.25, x + 0.85, y + 0.75, 0, 50, { top: '#2b3242', left: '#141924', right: '#0f131c' });
+    for (let i = 0; i < 7; i++) {
+      facePanel(ctx, b.fL, 0.1, 0.9, 0.08 + i * 0.125, 0.16 + i * 0.125, '#1d2433');
+      for (let j = 0; j < 3; j++) {
+        const on = Math.sin(now / (180 + j * 70) + i * 2.1 + j * 1.3) > 0;
+        facePanel(ctx, b.fL, 0.15 + j * 0.09, 0.2 + j * 0.09, 0.1 + i * 0.125, 0.14 + i * 0.125, on ? (j === 2 ? '#ffb347' : CY) : '#24405a');
+      }
+    }
+    const g = onFace(b.fL, 0.5, 0.5);
+    const gl = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 28);
+    gl.addColorStop(0, alpha(CY, 0.12)); gl.addColorStop(1, alpha(CY, 0));
+    ctx.fillStyle = gl; ctx.fillRect(g.x - 28, g.y - 28, 56, 56);
   }
 
   // Meja biliar: digambar per tile (kaki, badan kayu, rel, kain hijau, lubang) agar
@@ -1635,6 +1753,15 @@
     ctx.setTransform(z, 0, 0, z, -R.cam.x * z, -R.cam.y * z);
     ctx.drawImage(floorCanvas, 0, 0);
     for (const f of s.facilities) if (f.type === 'pool') drawWater(ctx, VO.poolWater(f), now);
+    // cincin cahaya berdenyut di lantai sekitar meja Boss
+    const bs = s.facilities.find((f) => f.type === 'boss') && VO.bossSeat(s);
+    if (bs && !robot() && !modern()) {
+      const c = iso(bs.desk.x + 0.5, bs.desk.y + 0.1);
+      const ph = (now / 2400) % 1;
+      ctx.save(); ctx.strokeStyle = alpha(CY, 0.5 * (1 - ph)); ctx.lineWidth = 2;
+      const rx = FLAT ? 60 + ph * 30 : 70 + ph * 34, ry = FLAT ? 40 + ph * 20 : 35 + ph * 17;
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, rx, ry, 0, 0, 7); ctx.stroke(); ctx.restore();
+    }
 
     // gabungkan props + karakter, urutkan dari belakang ke depan
     const people = [s.boss, ...s.agents].map((e) => [e, VO.sim.rt.get(e.id)]).filter(([, rt]) => rt);
