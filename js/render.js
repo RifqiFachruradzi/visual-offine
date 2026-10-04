@@ -666,9 +666,72 @@
     // video wall di dinding belakang: dashboard kantor real-time
     const vx0 = seat.chair.x - 3, vx1 = seat.chair.x + 2;
     add(seat.chair.x + seat.chair.y + 0.95, (ctx, now, st) => drawVideoWall(ctx, vx0, f.y + 0.97, vx1 - vx0, st, now));
+    // sofa tamu, meja kopi, meja meeting kecil, kursi, tanaman
+    for (const it of VO.bossExtras(f)) {
+      const n = it.len || 1;
+      add(it.x + it.y + n - 1 + 1 + (it.kind === 'coffee' ? 0.05 : 0), (ctx, now) => {
+        if (it.kind === 'sofa') drawSideSofa(ctx, it.x, it.y, n);
+        else if (it.kind === 'coffee') drawCoffeeTable(ctx, it.x, it.y, n);
+        else if (it.kind === 'mtable') drawRoundTable(ctx, it.x, it.y);
+        else if (it.kind === 'tub') drawTubChair(ctx, it.x, it.y);
+        else drawFurniture(ctx, { type: 'plant', x: it.x, y: it.y });
+      });
+    }
     // server rack berkedip di pojok kiri & tanaman di kanan
     add(f.x + 1.5 + f.y + 1.5, (ctx, now) => drawServerRack(ctx, f.x + 1, f.y + 1, now));
     add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
+  }
+
+  // Sofa tamu memanjang searah sumbu y, sandaran di sisi -x (menghadap ke tengah ruangan)
+  function drawSideSofa(ctx, x, y, n) {
+    const C = luxe() ? { base: '#e8dcc5', back: '#d8caad' } : robot() ? { base: '#ffffff', back: NAVY } : classic() ? { base: '#3d63d8', back: '#2f50c2' } : modern() ? { base: '#c9ced8', back: '#b3b9c6' } : { base: '#4a5068', back: '#3b4056' };
+    const sh = [iso(x + 0.1, y + 0.1), iso(x + 0.95, y + 0.1), iso(x + 0.95, y + n - 0.05), iso(x + 0.1, y + n - 0.05)];
+    poly(ctx, sh.map((p) => ({ x: p.x + 3, y: p.y + 4 })), 'rgba(0,0,0,0.15)');
+    box(ctx, x + 0.1, y + 0.08, x + 0.3, y + n - 0.08, 0, 24, { base: C.back }); // sandaran
+    box(ctx, x + 0.25, y + 0.12, x + 0.9, y + n - 0.12, 0, 10, { base: C.base }); // dudukan
+    for (let i = 0; i < n; i++) box(ctx, x + 0.3, y + i + 0.18, x + 0.86, y + i + 0.92, 10, 3, { base: mix(C.base, '#ffffff', 0.12) }, { outline: false }); // bantal
+    box(ctx, x + 0.1, y + 0.05, x + 0.9, y + 0.2, 0, 16, { base: C.back }); // lengan
+    box(ctx, x + 0.1, y + n - 0.2, x + 0.9, y + n - 0.05, 0, 16, { base: C.back });
+    // bantal hias
+    box(ctx, x + 0.3, y + 0.35, x + 0.45, y + 0.75, 10, 10, { base: luxe() ? LX.gold : CORAL }, { outline: false });
+  }
+
+  // Meja kopi kaca dengan kaki logam, buku & cangkir
+  function drawCoffeeTable(ctx, x, y, n) {
+    for (const [lx, ly] of [[0.3, 0.35], [0.7, 0.35], [0.3, n - 0.35], [0.7, n - 0.35]]) box(ctx, x + lx - 0.03, y + ly - 0.03, x + lx + 0.03, y + ly + 0.03, 0, 9, '#8f96a3', { outline: false });
+    box(ctx, x + 0.22, y + 0.3, x + 0.78, y + n - 0.3, 9, 2, { top: 'rgba(170,225,255,0.55)', left: 'rgba(120,180,220,0.6)', right: 'rgba(100,160,200,0.6)' }, { outline: false });
+    poly(ctx, diamond(x + 0.35, y + 0.55, 0.3, 0.4, 11), '#c0392b'); // buku
+    poly(ctx, diamond(x + 0.37, y + 0.58, 0.26, 0.34, 12.5), '#f5f0e6');
+    box(ctx, x + 0.45, y + n - 0.7, x + 0.55, y + n - 0.6, 11, 4, '#ffffff', { outline: false }); // cangkir
+  }
+
+  // Meja meeting bundar kecil dengan laptop & kopi
+  function drawRoundTable(ctx, x, y) {
+    const c = iso(x + 0.5, y + 0.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(c.x + 2, c.y + 2, 22, 11, 0, 0, 7); ctx.fill();
+    box(ctx, x + 0.44, y + 0.44, x + 0.56, y + 0.56, 0, 14, '#3a3f4b', { outline: false });
+    const top = luxe() ? '#6f4a2e' : robot() ? '#ffffff' : classic() ? CL.desk : modern() ? '#ffffff' : '#8a6648';
+    const p = iso(x + 0.5, y + 0.5, 14);
+    ctx.fillStyle = shade(top, 0.8); ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 26, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = top; ctx.beginPath(); ctx.ellipse(p.x, p.y, 26, 13, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.stroke();
+    // laptop terbuka & dua cangkir
+    poly(ctx, diamond(x + 0.3, y + 0.35, 0.3, 0.22, 14), '#c9ccd3');
+    const lid = box(ctx, x + 0.3, y + 0.33, x + 0.6, y + 0.36, 14, 9, '#b9bcc4', { outline: false });
+    facePanel(ctx, lid.fR, 0.1, 0.9, 0.15, 0.9, '#7fd3ff');
+    box(ctx, x + 0.62, y + 0.6, x + 0.7, y + 0.68, 14, 4, '#ffffff', { outline: false });
+    box(ctx, x + 0.25, y + 0.68, x + 0.33, y + 0.76, 14, 4, '#ffffff', { outline: false });
+  }
+
+  // Kursi tub bundar modern (tanpa arah)
+  function drawTubChair(ctx, x, y) {
+    const C = luxe() ? '#2b2e36' : robot() ? NAVY : classic() ? CL.chair : modern() ? '#7f8ba0' : '#3a3f4b';
+    const p = iso(x + 0.5, y + 0.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 12, 6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = shade(C, 0.75); ctx.beginPath(); ctx.ellipse(p.x, p.y - 4, 11, 5.5, 0, 0, Math.PI); ctx.lineTo(p.x - 11, p.y - 10); ctx.ellipse(p.x, p.y - 10, 11, 5.5, 0, Math.PI, 0, true); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = C; ctx.beginPath(); ctx.ellipse(p.x, p.y - 10, 11, 5.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = luxe() ? '#e8dcc5' : shade(C, 1.25); ctx.beginPath(); ctx.ellipse(p.x, p.y - 10.5, 7.5, 3.6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = shade(C, 0.9); ctx.beginPath(); ctx.ellipse(p.x, p.y - 14, 11, 5.5, 0, Math.PI, 0); ctx.lineTo(p.x + 11, p.y - 10); ctx.ellipse(p.x, p.y - 10, 11, 5.5, 0, 0, Math.PI, true); ctx.closePath(); ctx.fill(); // sandaran melingkar belakang
   }
 
   function drawVideoWall(ctx, x, y, w, s, now) {

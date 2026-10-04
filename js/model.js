@@ -339,6 +339,28 @@
     return { x: f.x + Math.floor((f.w - 3) / 2), y: f.y + Math.floor((f.h - 2) / 2) + 1, w: 3, h: 2 };
   };
 
+  // Perabot tambahan Ruang Boss: sofa tamu + meja kopi (kiri), meja meeting kecil + kursi (kanan), tanaman
+  VO.bossExtras = function (f) {
+    if (f.w < 9 || f.h < 7) return [];
+    const L = f.x, T = f.y, R = f.x + f.w, B = f.y + f.h;
+    return [
+      { kind: 'sofa', x: L + 1, y: T + 3, len: 2 },
+      { kind: 'coffee', x: L + 2, y: T + 3, len: 2 },
+      { kind: 'mtable', x: R - 3, y: B - 3 },
+      { kind: 'tub', x: R - 4, y: B - 3 },
+      { kind: 'tub', x: R - 2, y: B - 3 },
+      { kind: 'tub', x: R - 3, y: B - 2 },
+      { kind: 'plant', x: L + 1, y: B - 2 },
+      { kind: 'plant', x: R - 2, y: T + 3 },
+    ];
+  };
+  // tile yang ditempati perabot tambahan (untuk grid jalan)
+  VO.bossExtraTiles = function (f) {
+    const out = [];
+    for (const it of VO.bossExtras(f)) for (let i = 0; i < (it.len || 1); i++) out.push({ x: it.x, y: it.y + i });
+    return out;
+  };
+
   VO.meetingTable = function (f) {
     return { x: f.x + 3, y: f.y + 3, w: Math.max(1, f.w - 6), h: Math.max(1, f.h - 6) };
   };

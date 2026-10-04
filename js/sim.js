@@ -31,6 +31,7 @@
         for (let y = t.y; y < t.y + t.h; y++) for (let x = t.x; x < t.x + t.w; x++) set(x, y);
       }
       if (f.type === 'pantry') for (let x = f.x + 1; x < f.x + f.w - 1; x++) set(x, f.y + 1);
+      if (f.type === 'boss') for (const c of VO.bossExtraTiles(f)) set(c.x, c.y);
       if (f.type === 'billiard') {
         const b = VO.billiardTable(f);
         for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) set(x, y);
