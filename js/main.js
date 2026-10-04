@@ -259,6 +259,26 @@
     VO.ui.toast(v === '2d' ? 'Tampilan 2D (denah dari atas)' : 'Tampilan 3D (isometrik)', v === '2d' ? 'layout' : 'layers');
   };
 
+  // Tombol + / − : zoom di titik tengah layar, dengan animasi halus
+  let zoomAnim = null;
+  app.zoomBy = function (f) {
+    const c = $('office');
+    const sx = c.clientWidth / 2, sy = c.clientHeight / 2;
+    const target = VO.clamp((zoomAnim ? zoomAnim.target : R.cam.zoom) * f, 0.2, 3);
+    const start = performance.now(), from = R.cam.zoom;
+    if (zoomAnim) cancelAnimationFrame(zoomAnim.raf);
+    zoomAnim = { target };
+    const step = (now) => {
+      const k = Math.min(1, (now - start) / 180), e = 1 - (1 - k) * (1 - k);
+      const before = R.screenToIso(sx, sy);
+      R.cam.zoom = from + (target - from) * e;
+      R.cam.x = before.x - sx / R.cam.zoom;
+      R.cam.y = before.y - sy / R.cam.zoom;
+      if (k < 1) zoomAnim.raf = requestAnimationFrame(step); else zoomAnim = null;
+    };
+    zoomAnim.raf = requestAnimationFrame(step);
+  };
+
   function syncControls() {
     const s = app.state;
     applyTheme();
@@ -301,6 +321,11 @@
     $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
     $('btnFit').onclick = () => R.fit($('office'), s());
+    $('zoomIn').onclick = () => app.zoomBy(1.25);
+    $('zoomOut').onclick = () => app.zoomBy(1 / 1.25);
+    $('zoomFit').onclick = () => R.fit($('office'), s());
+    setInterval(() => { $('zoomPct').textContent = Math.round(R.cam.zoom * 100) + '%'; }, 150);
+    $('zoomPct').onclick = () => R.fit($('office'), s());
     $('view2d').onclick = () => app.setView('2d');
     $('view3d').onclick = () => app.setView('3d');
     $('btnTheme').onclick = () => {
@@ -352,6 +377,8 @@
       if (e.key === 'e' || e.key === 'E') setMode(!app.ui.edit);
       if (e.key === 'v' || e.key === 'V') setMode(false);
       if (e.key === 'f' || e.key === 'F') R.fit($('office'), app.state);
+      if (e.key === '+' || e.key === '=') app.zoomBy(1.25);
+      if (e.key === '-' || e.key === '_') app.zoomBy(1 / 1.25);
       if (e.key === '2') app.setView('2d');
       if (e.key === '3') app.setView('3d');
       if (e.key === 'Escape') { app.select(null); VO.chat.close(); }
