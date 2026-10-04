@@ -242,9 +242,27 @@
     b.title = `Tampilan: ${THEME_LABEL[t]} — klik untuk ganti ke ${THEME_LABEL[next]}`;
   }
 
+  // Tombol 2D / 3D: ganti proyeksi kamera, posisi & data kantor tetap sama
+  function applyView() {
+    const v = app.state.settings.view === '2d' ? '2d' : '3d';
+    $('view2d').classList.toggle('active', v === '2d');
+    $('view3d').classList.toggle('active', v === '3d');
+  }
+  app.setView = function (v) {
+    const st = app.state.settings;
+    if ((st.view || '3d') === v) return;
+    st.view = v;
+    applyView();
+    R.staticDirty = true;
+    R.fit($('office'), app.state);
+    app.changed();
+    VO.ui.toast(v === '2d' ? 'Tampilan 2D (denah dari atas)' : 'Tampilan 3D (isometrik)', v === '2d' ? 'layout' : 'layers');
+  };
+
   function syncControls() {
     const s = app.state;
     applyTheme();
+    applyView();
     $('companyName').value = s.company.name;
     $('ambient').checked = !!s.settings.ambient;
     $('aiMode').checked = !!s.settings.aiMode && VO.ai.available;
@@ -283,6 +301,8 @@
     $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
     $('btnFit').onclick = () => R.fit($('office'), s());
+    $('view2d').onclick = () => app.setView('2d');
+    $('view3d').onclick = () => app.setView('3d');
     $('btnTheme').onclick = () => {
       const st = s().settings;
       st.theme = THEMES[(THEMES.indexOf(st.theme || 'luxe') + 1) % THEMES.length];
@@ -332,6 +352,8 @@
       if (e.key === 'e' || e.key === 'E') setMode(!app.ui.edit);
       if (e.key === 'v' || e.key === 'V') setMode(false);
       if (e.key === 'f' || e.key === 'F') R.fit($('office'), app.state);
+      if (e.key === '2') app.setView('2d');
+      if (e.key === '3') app.setView('3d');
       if (e.key === 'Escape') { app.select(null); VO.chat.close(); }
       if (e.key === 'Delete' && app.sel && app.sel.id !== 'boss') VO.ui.remove(app.sel.kind, app.sel.id);
     });

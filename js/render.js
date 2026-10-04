@@ -60,14 +60,29 @@
   };
   const alpha = (hex, a) => { const [r, g, b] = hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; };
 
+  // Mode tampilan: '3d' = isometrik (default), '2d' = denah dari atas (sedikit perspektif 3/4)
+  const S2 = 40, ZF = 0.3; // ukuran tile 2D (px) & faktor tinggi benda di 2D
+  const flat = () => !!(VO.app && VO.app.state && VO.app.state.settings.view === '2d');
+  R.isFlat = flat;
+  let FLAT = false; // disalin dari setting tiap frame / rebuild (iso dipanggil sangat sering)
   function updateGeo(s) {
+    FLAT = flat();
+    if (FLAT) {
+      geo.OX = 40; geo.OY = 90;
+      geo.W = s.map.w * S2 + 80;
+      geo.H = s.map.h * S2 + geo.OY + 60;
+      return;
+    }
     geo.OX = s.map.h * HW + 40;
     geo.OY = 90;
     geo.W = (s.map.w + s.map.h) * HW + 80;
     geo.H = (s.map.w + s.map.h) * HH + geo.OY + 60;
   }
-  const iso = (tx, ty, z = 0) => ({ x: geo.OX + (tx - ty) * HW, y: geo.OY + (tx + ty) * HH - z });
+  const iso = (tx, ty, z = 0) => FLAT
+    ? { x: geo.OX + tx * S2, y: geo.OY + ty * S2 - z * ZF }
+    : { x: geo.OX + (tx - ty) * HW, y: geo.OY + (tx + ty) * HH - z };
   const toTile = (ix, iy) => {
+    if (FLAT) return { x: (ix - geo.OX) / S2, y: (iy - geo.OY) / S2 };
     const a = (ix - geo.OX) / HW, b = (iy - geo.OY) / HH;
     return { x: (a + b) / 2, y: (b - a) / 2 };
   };
@@ -284,7 +299,8 @@
   function floorText(ctx, text, tx, ty, size, color) {
     const o = iso(tx, ty);
     ctx.save();
-    ctx.setTransform(HW / 32, HH / 32, -HW / 32, HH / 32, o.x, o.y);
+    if (FLAT) ctx.setTransform(S2 / 32, 0, 0, S2 / 32, o.x, o.y);
+    else ctx.setTransform(HW / 32, HH / 32, -HW / 32, HH / 32, o.x, o.y);
     ctx.font = `800 ${size}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = color;
     ctx.fillText(text, 0, 0);
@@ -622,6 +638,7 @@
   function wallTV(ctx, x, y, w, s, now) {
     const b = box(ctx, x, y, x + w, y + 0.06, 14, 42, '#0d0f14', { outline: false });
     facePanel(ctx, b.fL, 0.03, 0.97, 0.06, 0.94, '#121a30');
+    if (FLAT) return; // di denah 2D layar hanya terlihat sebagai garis gelap
     const active = s.tasks.find((t) => !['done', 'failed'].includes(t.status));
     const glow = 0.85 + Math.sin(now / 600) * 0.15;
     ctx.save(); ctx.globalAlpha = glow;
@@ -1194,7 +1211,7 @@
     }
     ctx.save();
     ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
-    const SC = luxe() ? 1.25 : 1.15;
+    const SC = FLAT ? 0.95 : luxe() ? 1.25 : 1.15;
     ctx.scale(SC, SC);
     const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
     const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;

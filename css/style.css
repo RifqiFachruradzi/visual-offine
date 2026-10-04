@@ -276,3 +276,5 @@ body.luxe {
   --card: #10162a; --float: rgba(16,21,38,.93); --hint-bg: rgba(10,14,26,.8); --soft: #c4cadb; --dash: #2f3958;
 }
 body.luxe button.primary { color: #1a1408; }
+
+.viewseg .mode { font-weight: 700; padding: 4px 10px; min-width: 38px; }
