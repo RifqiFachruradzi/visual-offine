@@ -1170,7 +1170,8 @@
     ctx.fillStyle = 'rgba(0,0,0,0.24)';
     ctx.beginPath(); ctx.ellipse(0, 0, 13, 5, 0, 0, 7); ctx.fill();
 
-    const lift = sit ? 6 : Math.abs(sw) * 1.2; // badan naik turun saat jalan
+    // duduk: pinggul turun ke dudukan kursi (±10 px di atas lantai); jalan: badan naik turun
+    const lift = sit ? -10 : Math.abs(sw) * 1.2;
     ctx.translate(0, -lift);
 
     // ---- kaki
@@ -1189,9 +1190,15 @@
         rr(ctx, lx - 0.5 + off * 0.4, -3.5 + off * 0.2, 7.5, 4, 1.5); ctx.fill();
       });
     } else {
-      // duduk: paha ke depan
+      // duduk: paha mendatar di dudukan, tulang kering & sepatu turun ke lantai (terlihat dari depan)
       ctx.fillStyle = female ? shade(skin, 0.95) : pants;
-      ctx.fillRect(-6, legTop + 4, 12, 7);
+      ctx.fillRect(-7, legTop - 1, 14, 6);
+      if (!o.back) {
+        ctx.fillStyle = female ? shade(skin, 0.9) : shade(pants, 0.85);
+        ctx.fillRect(-6.5, legTop + 5, 5, 6); ctx.fillRect(1.5, legTop + 5, 5, 6);
+        ctx.fillStyle = female ? shade(top, 0.6) : '#26272b';
+        rr(ctx, -7.5, legTop + 10, 7, 3.5, 1.5); ctx.fill(); rr(ctx, 0.5, legTop + 10, 7, 3.5, 1.5); ctx.fill();
+      }
     }
     if (female) { // rok
       ctx.fillStyle = shade(pants === '#c2b49a' ? '#3b3f6a' : pants, 1.05);
@@ -1319,7 +1326,7 @@
     const hop = happy ? Math.sin(happy * Math.PI) * 9 : 0;
     const breathe = Math.sin(t * 2.1 + seed) * 0.8;
     const bounce = o.moving ? Math.abs(Math.sin(walk)) * 2.2 : 0;
-    const lift = (sit ? 7 : 0) + bounce + hop;
+    const lift = (sit ? -9 : 0) + bounce + hop; // duduk: pinggul turun ke dudukan kursi
 
     // capsule yang berputar di titik sendi; mengembalikan titik ujungnya
     const seg = (x, y, ang, len, w, col) => {
