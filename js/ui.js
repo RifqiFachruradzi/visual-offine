@@ -227,11 +227,13 @@
       { key: 'hasDir', label: 'Punya direktur divisi', type: 'checkbox', value: !!dir },
       { key: 'dirPos', label: 'Posisi meja direktur (atasan)', type: 'select', value: div.dirPos || (VO.openPlan(s) ? 'center' : 'left'), options: [{ value: 'left', label: 'Kiri' }, { value: 'center', label: 'Tengah' }, { value: 'right', label: 'Kanan' }] },
       { key: 'integration', label: 'Integrasi data (dibaca semua departemen & direktur divisi ini)', type: 'select', value: div.integration || '', options: VO.integ.options() },
+      { key: 'city', label: 'Kota untuk data Cuaca (berlaku untuk seluruh kantor)', value: s.settings.city || 'Jakarta' },
     ]);
     if (!v) return;
     div.name = v.name || div.name;
     div.color = v.color[0];
     if (v.integration) div.integration = v.integration; else delete div.integration;
+    if (v.city) s.settings.city = v.city;
     if (v.dirPos !== (div.dirPos || '')) { div.dirPos = v.dirPos; VO.placeDirector(s, div); }
     if (v.hasDir && !dir) s.agents.push(VO.makeAgent({ divisionId: id, isDirector: true, role: 'Direktur ' + div.name, shirt: '#2d3142' }));
     if (!v.hasDir && dir) VO.removeAgent(s, dir.id);
@@ -245,10 +247,12 @@
       { key: 'name', label: 'Nama departemen', value: d.name, required: true },
       { key: 'divisionId', label: 'Divisi', type: 'select', value: d.divisionId, options: s.divisions.map((x) => ({ value: x.id, label: x.name })) },
       { key: 'integration', label: 'Integrasi data', type: 'select', value: d.integration || '', options: [{ value: '', label: 'Ikut divisi / tidak ada' }, ...VO.integ.options().slice(1)] },
+      { key: 'city', label: 'Kota untuk data Cuaca (berlaku untuk seluruh kantor)', value: s.settings.city || 'Jakarta' },
     ]);
     if (!v) return;
     d.name = v.name || d.name;
     if (v.integration) d.integration = v.integration; else delete d.integration;
+    if (v.city) s.settings.city = v.city;
     if (v.divisionId !== d.divisionId) {
       d.divisionId = v.divisionId;
       s.agents.filter((a) => a.deptId === d.id).forEach((a) => (a.divisionId = v.divisionId));

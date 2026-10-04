@@ -21,7 +21,7 @@
       ...def,
       async fetch() {
         if (location.protocol === 'file:') throw new Error(`Butuh server (npm start / Vercel) untuk membaca ${def.label}`);
-        const r = await fetch(def.endpoint, { cache: 'no-store' });
+        const r = await fetch(typeof def.endpoint === 'function' ? def.endpoint() : def.endpoint, { cache: 'no-store' });
         if (r.status === 401) { location.href = '/login.html'; throw new Error('Sesi habis'); }
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);

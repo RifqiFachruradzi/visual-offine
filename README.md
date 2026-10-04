@@ -10,6 +10,7 @@ mengatur bentuk kantor, menambah **divisi**, **departemen**, merekrut **agen**, 
 | **Daftar & masuk** | Halaman login dengan tab **Masuk / Daftar** (email + kata sandi), seperti SimpananMu & Gudang-Document. Akun disimpan di **Upstash Redis** (hash scrypt, maks. 10 percobaan / 15 menit). Semua halaman & API dikunci di sisi server (cookie bertanda tangan + Vercel Middleware). Opsional: `REGISTER_CODE` (kode undangan) atau `ALLOW_REGISTER=false`. |
 | **Departemen Gudang ↔ Gudang-Document** | Template departemen **Gudang** (Kepala Gudang, Analis Stok, Admin PO & Penerimaan, Petugas Barang Keluar & Opname). Saat diberi tugas, tim menarik data aplikasi Gudang-Document (stok, PO, GRN, barang keluar, opname, supplier) — **hanya baca** — lalu Gemini mengolahnya menjadi laporan. Tanpa AI, laporan stok kritis & PO tertunda dihitung otomatis dari data. |
 | **Divisi Minimarket ↔ MiniMarket** | Template divisi **Minimarket** (Direktur Minimarket + departemen Toko & Penjualan, Persediaan, Keuangan Toko — 8 karyawan siap pakai). Seluruh divisi membaca data aplikasi MiniMarket (penjualan, stok, kas & bank, piutang/hutang, laba rugi) langsung dari database Turso — **hanya baca**. Integrasi juga bisa dipasang ke divisi mana pun lewat **Edit divisi → Integrasi data**. |
+| **Data Publik (public-apis)** | Integrasi gratis tanpa API key dari daftar [public-apis](https://github.com/public-apis/public-apis): **Kurs Mata Uang** (Frankfurter), **Hari Libur Nasional** (Nager.Date), **Cuaca** 7 hari (Open-Meteo), atau **Data Publik** (gabungan ketiganya). Pasang di divisi/departemen lewat **Edit → Integrasi data**; data disisipkan ke konteks tugas & chat agen. |
 | **Kamu = Boss** | Nama saat mendaftar otomatis menjadi Boss. Kantor, ingatan agen, dan Gudang Dokumen tersimpan **per akun di database**, jadi bisa dibuka dari perangkat mana pun. |
 | **Mulai dari kosong** | Kantor baru hanya berisi Ruang Boss, Ruang Rapat, dan Pantry — cocok untuk demo menambah divisi & karyawan. Tombol **Contoh** memuat kantor contoh, **Kosongkan** mulai dari nol lagi. |
 | **Hierarki kantor** | Kamu (Boss) → Direktur Divisi → Ketua Tim (lead) → Anggota. Setiap level briefing ke atasan, bekerja di mejanya, lalu melapor balik. |
@@ -183,3 +184,17 @@ Semua departemen dan direktur di divisi itu mendapat data yang sama; departemen 
 Data yang diambil: ringkasan penjualan hari ini & bulan ini, penjualan harian 30 hari, metode bayar, produk terlaris & tidak laku,
 stok semua produk (status habis/menipis), nilai persediaan per kategori, saldo kas & bank, piutang & hutang belum lunas,
 penerimaan & pengeluaran barang, stock opname, dan laba rugi bulan berjalan. Akun pengguna MiniMarket tidak diambil.
+
+## Integrasi Data Publik (public-apis)
+
+API gratis tanpa key dari [public-apis/public-apis](https://github.com/public-apis/public-apis), dibaca lewat server (`/api/public`), di-cache 10 menit, **hanya baca**:
+
+| Integrasi | Sumber | Isi |
+|---|---|---|
+| Kurs Mata Uang | [Frankfurter](https://frankfurter.dev) (kurs ECB) | 1 USD/EUR/SGD/MYR/CNY/JPY/AUD/GBP/SAR = Rp…, tren USD/IDR 30 hari |
+| Hari Libur Nasional | [Nager.Date](https://date.nager.at) | Libur nasional Indonesia tahun ini & depan, berapa hari lagi |
+| Cuaca | [Open-Meteo](https://open-meteo.com) | Cuaca sekarang + prakiraan 7 hari (suhu, hujan, peluang hujan) |
+| Data Publik | gabungan | Ketiganya sekaligus (bagian yang gagal dilaporkan, sisanya tetap dipakai) |
+
+Cara pakai: klik divisi/departemen → **Edit** → **Integrasi data** → pilih salah satu → **Tes koneksi**. Kota untuk cuaca diisi di form yang sama
+(default Jakarta, atau env `WEATHER_CITY`). Tidak perlu API key atau pengaturan Vercel tambahan.
