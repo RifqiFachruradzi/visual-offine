@@ -397,8 +397,8 @@
         facePanel(ctx, face, 0, 0.035, 0, 1, LX.frame);
       });
       const front = (x0, y0, x1, y1) => add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
-        if (type === 'meeting') { // dinding kaca penuh ruang rapat
-          const g = box(ctx, x0, y0, x1, y1, 0, 50, { top: '#2b2f38', left: 'rgba(170,210,240,0.13)', right: 'rgba(150,190,230,0.11)' }, { outline: false });
+        if (type === 'meeting' || type === 'zone') { // dinding kaca penuh: ruang rapat & ruangan divisi/direktur
+          const g = box(ctx, x0, y0, x1, y1, 0, type === 'zone' ? 56 : 50, { top: '#2b2f38', left: 'rgba(170,210,240,0.13)', right: 'rgba(150,190,230,0.11)' }, { outline: false });
           ctx.strokeStyle = 'rgba(220,235,255,0.35)'; ctx.lineWidth = 1;
           for (const f2 of [g.fL, g.fR]) { ctx.beginPath(); ctx.moveTo(f2[3].x, f2[3].y); ctx.lineTo(f2[2].x, f2[2].y); ctx.moveTo(f2[0].x, f2[0].y); ctx.lineTo(f2[3].x, f2[3].y); ctx.stroke(); }
           return;
