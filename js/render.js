@@ -335,6 +335,7 @@
     poly(ctx, [B, C, { x: C.x, y: C.y + 14 }, { x: B.x, y: B.y + 14 }], '#bfc4cc');
     const zoneOf = new Map();
     const setRect = (r, v) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) zoneOf.set(x + ',' + y, v); };
+    for (const div of s.divisions) setRect(div.zone, 'z:' + div.color);
     for (const f of s.facilities) setRect(f, 'f:' + mix(f.color, '#ffffff', 0.82));
     for (const d of s.departments) setRect({ x: d.room.x, y: d.room.y + 1, w: d.room.w, h: d.room.h - 1 }, 'd:' + deptColor(s, d));
     for (let y = 0; y < mh; y++)
@@ -346,8 +347,9 @@
         if (z && z.startsWith('d:')) { poly(ctx, pts, mix(z.slice(2), '#ffffff', 0.35), 'rgba(0,0,0,0.04)'); continue; }
         if (z && z.startsWith('f:')) { poly(ctx, pts, z.slice(2), 'rgba(0,0,0,0.05)'); continue; }
         if (up) { poly(ctx, pts, (x + y) % 2 ? '#eef0f3' : '#e8ebef', 'rgba(0,0,0,0.04)'); continue; }
-        // lantai kayu terang di lantai 1
-        poly(ctx, pts, (x * 3 + y) % 4 === 0 ? '#dcbf93' : '#e3c79c');
+        // lantai kayu terang di lantai 1 (di dalam ruangan divisi diberi sedikit warna divisi)
+        const wood = (x * 3 + y) % 4 === 0 ? '#dcbf93' : '#e3c79c';
+        poly(ctx, pts, z && z.startsWith('z:') ? mix(wood, z.slice(2), 0.13) : wood);
         ctx.strokeStyle = 'rgba(120,80,30,0.14)'; ctx.beginPath();
         for (let k = 1; k < 3; k++) { const a = iso(x, y + k / 3), b = iso(x + 1, y + k / 3); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
         const u = x + hash(x, y); const j0 = iso(u, y0), j1 = iso(u, y + 1); ctx.moveTo(j0.x, j0.y); ctx.lineTo(j1.x, j1.y);
@@ -454,6 +456,7 @@
     const studioWalls = (r, color, fac) => {
       const doors = VO.doorTiles(r, fac);
       const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
+      if (fac && fac.type === 'zone') return partitionWalls(r, color, isDoor);
       const TALL = 58, TH_ = 0.16;
       const L = r.x, Tp = r.y, Rr = r.x + r.w - 1, B = r.y + r.h - 1;
       const wall = (x0, y0, x1, y1, face, win) => add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
@@ -472,6 +475,29 @@
       for (let y = Tp + 1; y <= B; y++) if (!isDoor(L, y)) wall(L + 1 - TH_, y, L + 1, y === B ? y + TH_ : y + 1, 'R', false);
       for (let y = Tp + 1; y < B; y++) if (!isDoor(Rr, y)) wall(Rr, y, Rr + TH_, y + 1, 'R', false);
       for (let x = L + 1; x <= Rr; x++) if (!isDoor(x, B)) glass(x, B, x === Rr ? x + TH_ : x + 1, B + TH_);
+    };
+
+    // Studio: ruangan divisi berdinding sekat kaca — rangka putih, tiang tiap tile, list warna divisi di atas
+    const partitionWalls = (r, color, isDoor) => {
+      const TH_ = 0.12, H = 46, HF = 30;
+      const L = r.x, Tp = r.y, Rr = r.x + r.w - 1, B = r.y + r.h - 1;
+      const pane = (x0, y0, x1, y1, h, side) => add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
+        // alas putih (plint), kaca, list warna di atas, tiang di ujung
+        box(ctx, x0, y0, x1, y1, 0, 6, { top: '#ffffff', left: '#eef0f3', right: '#dfe3e8' }, { outline: false });
+        const g = box(ctx, x0, y0, x1, y1, 6, h - 10, { top: 'rgba(255,255,255,0.4)', left: 'rgba(185,222,255,0.32)', right: 'rgba(165,205,240,0.28)' }, { outline: false });
+        box(ctx, x0, y0, x1, y1, h - 4, 4, { top: color, left: shade(color, 0.92), right: shade(color, 0.78) }, { outline: false });
+        const f = side === 'L' ? g.fL : g.fR;
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1;
+        ctx.beginPath(); const a = onFace(f, 0.25, 0.15), b = onFace(f, 0.45, 0.85); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); // kilau kaca
+        const px = side === 'L' ? [[x0, y0], [x1 - 0.05, y0]] : [[x0, y0], [x0, y1 - 0.05]];
+        for (const [qx, qy] of px) box(ctx, qx, qy, qx + 0.05 + (side === 'L' ? 0 : TH_ - 0.05), qy + 0.05 + (side === 'L' ? TH_ - 0.05 : 0), 0, h, { top: '#ffffff', left: '#f4f5f7', right: '#e3e6eb' }, { outline: false });
+      });
+      for (let x = L; x <= Rr; x++) if (!isDoor(x, Tp)) pane(x, Tp + 0.5 - TH_ / 2, x + 1, Tp + 0.5 + TH_ / 2, H, 'L');
+      for (let y = Tp; y <= B; y++) {
+        if (!isDoor(L, y)) pane(L + 0.5 - TH_ / 2, y, L + 0.5 + TH_ / 2, y + 1, H, 'R');
+        if (!isDoor(Rr, y)) pane(Rr + 0.5 - TH_ / 2, y, Rr + 0.5 + TH_ / 2, y + 1, H, 'R');
+      }
+      for (let x = L; x <= Rr; x++) if (!isDoor(x, B)) pane(x, B + 0.5 - TH_ / 2, x + 1, B + 0.5 + TH_ / 2, HF, 'L');
     };
 
     // Penthouse: dinding belakang kaca (pemandangan kota malam) diselingi pilar kayu
@@ -554,7 +580,7 @@
     const OPEN = VO.openPlan(s);
     const STU = studio();
     // open plan: satu ruangan untuk tiap divisi (direktur + semua departemennya)
-    if (OPEN && !STU) for (const div of s.divisions) walls(div.zone, div.color, { type: 'zone' });
+    if (OPEN) for (const div of s.divisions) walls(div.zone, div.color, { type: 'zone' }); // Studio: sekat kaca per divisi
     if (STU) studioShell(s, add);
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);
@@ -1754,7 +1780,7 @@
       plate(iso(d.room.x + d.room.w / 2, d.room.y + 0.7, 26), `${d.name.toUpperCase()} · ${n}`, shade(deptColor(s, d), 1.08));
     }
     for (const div of s.divisions) {
-      const p = iso(div.zone.x + 0.6, div.zone.y + 0.6);
+      const p = iso(div.zone.x + 1.2, div.zone.y + 1.4);
       ctx.save(); ctx.font = "bold 10px 'Courier New', ui-monospace, monospace";
       const tw = ctx.measureText(div.name.toUpperCase()).width + 22;
       ctx.fillStyle = div.color; rr(ctx, p.x, p.y - 8, tw, 16, 8); ctx.fill();
