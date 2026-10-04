@@ -97,38 +97,46 @@
     app().select({ kind: 'division', id: div.id });
   };
 
+  // template departemen siap pakai: { name, roles, integration }
+  function deptTemplates() {
+    const list = [{ value: 'gudang', label: 'Gudang — terhubung ke Gudang-Document', tpl: { ...VO.gudang.TEMPLATE, integration: 'gudang' } }];
+    VO.minimarket.TEMPLATE.departments.forEach((d, i) => list.push({ value: 'minimarket:' + i, label: `Minimarket · ${d.name} — terhubung ke MiniMarket`, tpl: { ...d, integration: 'minimarket' } }));
+    return list.map((x) => ({ ...x, label: `${x.label} (${x.tpl.roles.length} karyawan siap pakai)` }));
+  }
+
   ui.addDept = async function (divisionId) {
     const s = S();
+    const tpls = deptTemplates();
     const v = await ui.form('Tambah Departemen', [
-      { key: 'template', label: 'Template', type: 'select', value: 'blank', options: [
-        { value: 'blank', label: 'Kosong (atur sendiri)' },
-        { value: 'gudang', label: 'Gudang — terhubung ke Gudang-Document (4 karyawan siap pakai)' },
-      ] },
+      { key: 'template', label: 'Template', type: 'select', value: 'blank', options: [{ value: 'blank', label: 'Kosong (atur sendiri)' }, ...tpls.map(({ value, label }) => ({ value, label }))] },
       { key: 'name', label: 'Nama departemen (kosongkan untuk nama template)', value: '', placeholder: 'mis. Customer Support / Gudang' },
       { key: 'divisionId', label: 'Divisi', type: 'select', value: divisionId, options: s.divisions.map((d) => ({ value: d.id, label: d.name })) },
       { key: 'lead', label: 'Jabatan ketua tim (template Kosong)', value: 'Team Lead' },
       { key: 'count', label: 'Jumlah anggota awal selain ketua (template Kosong)', value: '2' },
     ]);
     if (!v) return;
-    const isGudang = v.template === 'gudang';
-    if (!v.name && !isGudang) return ui.toast('Nama departemen wajib diisi', 'alert');
+    const T = tpls.find((x) => x.value === v.template)?.tpl || null;
+    if (!v.name && !T) return ui.toast('Nama departemen wajib diisi', 'alert');
     const div = s.divisions.find((d) => d.id === v.divisionId);
-    const dept = VO.addDepartment(s, v.divisionId, { name: v.name || (isGudang ? VO.gudang.TEMPLATE.name : ''), integration: isGudang ? 'gudang' : undefined });
+    // integrasi yang sama dengan divisinya cukup diwarisi dari divisi
+    const integration = T && T.integration !== div.integration ? T.integration : undefined;
+    const dept = VO.addDepartment(s, v.divisionId, { name: v.name || (T ? T.name : ''), integration });
     // taruh di kanan departemen terakhir dalam zona
     const sibs = s.departments.filter((d) => d.divisionId === v.divisionId && d !== dept);
     const rx = sibs.length ? Math.max(...sibs.map((d) => d.room.x + d.room.w)) + 1 : div.zone.x + 1;
     dept.room = { x: rx, y: div.zone.y + 4, w: 9, h: 6 };
     let n;
-    if (isGudang) {
-      for (const r of VO.gudang.TEMPLATE.roles) VO.addAgent(s, dept.id, { ...r });
-      n = VO.gudang.TEMPLATE.roles.length - 1;
+    if (T) {
+      for (const r of T.roles) VO.addAgent(s, dept.id, { ...r });
+      n = T.roles.length - 1;
     } else {
       VO.addAgent(s, dept.id, { role: v.lead || 'Team Lead', isLead: true });
       n = VO.clamp(parseInt(v.count, 10) || 0, 0, 20);
       for (let i = 0; i < n; i++) VO.addAgent(s, dept.id, { role: 'Staff' });
     }
     app().fitZone(div);
-    VO.log(s, `Departemen baru: ${dept.name} (${n + 1} agen)${isGudang ? ' — terhubung ke Gudang-Document' : ''}`, isGudang ? 'server' : 'building');
+    const m = VO.integ.forDept(s, dept);
+    VO.log(s, `Departemen baru: ${dept.name} (${n + 1} agen)${m ? ' — terhubung ke ' + m.label : ''}`, m ? m.icon : 'building');
     app().layoutChanged();
     app().select({ kind: 'dept', id: dept.id });
   };
@@ -233,9 +241,11 @@
     const v = await ui.form('Edit Departemen', [
       { key: 'name', label: 'Nama departemen', value: d.name, required: true },
       { key: 'divisionId', label: 'Divisi', type: 'select', value: d.divisionId, options: s.divisions.map((x) => ({ value: x.id, label: x.name })) },
+      { key: 'integration', label: 'Integrasi data', type: 'select', value: d.integration || '', options: [{ value: '', label: 'Ikut divisi / tidak ada' }, ...VO.integ.options().slice(1)] },
     ]);
     if (!v) return;
     d.name = v.name || d.name;
+    if (v.integration) d.integration = v.integration; else delete d.integration;
     if (v.divisionId !== d.divisionId) {
       d.divisionId = v.divisionId;
       s.agents.filter((a) => a.deptId === d.id).forEach((a) => (a.divisionId = v.divisionId));
