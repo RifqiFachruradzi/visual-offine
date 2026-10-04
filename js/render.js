@@ -597,7 +597,7 @@
     box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : luxe() ? '#26282f' : '#5a3826');
   }
 
-  /* ---------- Ruang Boss berteknologi: meja kaca gelap ber-LED, hologram, video wall ---------- */
+  /* ---------- Ruang Boss berteknologi: meja kaca gelap ber-LED + laptop di kanan ruangan, video wall ---------- */
   const CY = '#35e0ff';
   function bossProps(s, f, add) {
     const seat = VO.bossSeat(s);
@@ -615,56 +615,23 @@
         if (i === 1) facePanel(ctx, b.fR, 0, 1, 0.1, 0.32, CY);
         ctx.restore();
         poly(ctx, diamond(x0 + 0.04, dy + 0.18, x1 - x0 - 0.08, 0.64, 18), 'rgba(120,200,255,0.08)'); // kilau kaca
-        if (i === -1) { // keyboard tipis & tablet
-          poly(ctx, diamond(dx + 0.45, dy + 0.42, 0.4, 0.16, 18), '#2b3242');
-          poly(ctx, diamond(dx - 0.75, dy + 0.35, 0.3, 0.35, 18), '#0e1320');
-          poly(ctx, diamond(dx - 0.72, dy + 0.38, 0.24, 0.29, 18), alpha(CY, 0.35));
-        }
-        if (i === 1) { // globe hologram berputar
-          const g = iso(dx + 1.5, dy + 0.5, 18);
-          ctx.fillStyle = '#2b3242'; ctx.beginPath(); ctx.ellipse(g.x, g.y, 7, 3.5, 0, 0, 7); ctx.fill();
-          ctx.fillStyle = alpha(CY, 0.8); ctx.beginPath(); ctx.ellipse(g.x, g.y - 1, 4.5, 2, 0, 0, 7); ctx.fill();
-          const cyy = g.y - 16, r = 9;
-          const gl = ctx.createRadialGradient(g.x, cyy, 0, g.x, cyy, 16);
-          gl.addColorStop(0, alpha(CY, 0.35)); gl.addColorStop(1, alpha(CY, 0));
-          ctx.fillStyle = gl; ctx.fillRect(g.x - 16, cyy - 16, 32, 32);
-          ctx.strokeStyle = alpha(CY, 0.85); ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(g.x, cyy, r, 0, 7); ctx.stroke();
-          for (let k = 0; k < 3; k++) { // meridian berputar
-            const w = Math.abs(Math.cos(now / 900 + k * 1.05)) * r;
-            ctx.beginPath(); ctx.ellipse(g.x, cyy, w, r, 0, 0, 7); ctx.stroke();
-          }
-          ctx.beginPath(); ctx.ellipse(g.x, cyy, r, r * 0.35, 0, 0, 7); ctx.stroke();
+        if (i === 0) { // hanya laptop: alas di depan Boss, layar menghadap Boss (dari depan terlihat punggungnya)
+          box(ctx, dx + 0.2, dy + 0.22, dx + 0.8, dy + 0.6, 18, 1.5, { top: '#cfd2d9', left: '#aeb2bb', right: '#9a9ea8' }, { outline: false });
+          poly(ctx, diamond(dx + 0.27, dy + 0.27, 0.46, 0.18, 19.6), '#2a2f3a'); // keyboard
+          const lid = box(ctx, dx + 0.2, dy + 0.58, dx + 0.8, dy + 0.62, 19, 15, { top: '#c4c8d0', left: '#b7bbc4', right: '#a3a7b1' }, { outline: false });
+          const c = onFace(lid.fL, 0.5, 0.55);
+          ctx.fillStyle = alpha(CY, 0.35 + 0.25 * Math.sin(now / 700)); ctx.beginPath(); ctx.arc(c.x, c.y, 2.4, 0, 7); ctx.fill(); // logo menyala
+          // pantulan cahaya layar ke Boss
+          const g = iso(dx + 0.5, dy + 0.4, 30);
+          const gl = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, 18);
+          gl.addColorStop(0, alpha(CY, 0.14)); gl.addColorStop(1, alpha(CY, 0));
+          ctx.fillStyle = gl; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
         }
       });
     // kursi eksekutif
     add(seat.chair.x + seat.chair.y + 0.8, (ctx) => drawExecChair(ctx, seat.chair.x, seat.chair.y));
-    // layar hologram melayang di depan meja (dashboard untuk Boss)
-    add(dx + dy + 5.0, (ctx, now, st) => {
-      if (FLAT) return;
-      const hx0 = dx - 0.55, hx1 = dx + 1.55, hy = dy + 0.55;
-      const f2 = [iso(hx0, hy, 30), iso(hx1, hy, 30), iso(hx1, hy, 66), iso(hx0, hy, 66)];
-      const flick = 0.85 + Math.sin(now / 130) * 0.05;
-      ctx.save(); ctx.globalAlpha = flick;
-      poly(ctx, f2, alpha(CY, 0.1), alpha(CY, 0.7));
-      // garis proyeksi dari meja
-      ctx.strokeStyle = alpha(CY, 0.25); ctx.beginPath();
-      const base = iso(dx + 0.5, dy + 0.5, 18);
-      ctx.moveTo(base.x, base.y); ctx.lineTo(f2[0].x, f2[0].y); ctx.moveTo(base.x, base.y); ctx.lineTo(f2[1].x, f2[1].y); ctx.stroke();
-      // grafik batang & garis bergerak
-      for (let k = 0; k < 6; k++) {
-        const h = 0.2 + (Math.sin(now / 700 + k * 1.3) + 1) * 0.25;
-        facePanel(ctx, f2, 0.08 + k * 0.08, 0.13 + k * 0.08, 0.12, 0.12 + h * 0.7, alpha(CY, 0.55));
-      }
-      ctx.strokeStyle = '#9ff3ff'; ctx.lineWidth = 1.2; ctx.beginPath();
-      for (let k = 0; k <= 10; k++) { const p = onFace(f2, 0.58 + k * 0.035, 0.35 + Math.sin(now / 600 + k * 0.8) * 0.18 + k * 0.03); k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
-      ctx.stroke(); ctx.lineWidth = 1;
-      const busy = st.agents.filter((a) => VO.sim.isBusy(a.id)).length;
-      faceText(ctx, f2, 0.56, 0.82, `${busy}/${st.agents.length} AKTIF`, 'bold 7px Inter, system-ui, sans-serif', '#d8fbff', 80);
-      ctx.restore();
-    });
     // video wall di dinding belakang: dashboard kantor real-time
-    const vx0 = seat.chair.x - 3, vx1 = seat.chair.x + 2;
+    const vx1 = Math.min(seat.chair.x + 2, f.x + f.w - 1), vx0 = Math.max(f.x + 2, vx1 - 5);
     add(seat.chair.x + seat.chair.y + 0.95, (ctx, now, st) => drawVideoWall(ctx, vx0, f.y + 0.97, vx1 - vx0, st, now));
     // sofa tamu, meja kopi, meja meeting kecil, kursi, tanaman
     for (const it of VO.bossExtras(f)) {

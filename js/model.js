@@ -320,7 +320,8 @@
   VO.bossSeat = function (s) {
     const f = s.facilities.find((f) => f.type === 'boss');
     if (!f) return { desk: { x: 3, y: 3 }, chair: { x: 3, y: 2 }, room: null };
-    const cx = f.x + Math.floor(f.w / 2);
+    // meja Boss di sisi kanan ruangan (meja 3 tile: cx-1..cx+1)
+    const cx = f.x + f.w - 3;
     return { desk: { x: cx, y: f.y + 3 }, chair: { x: cx, y: f.y + 2 }, room: f };
   };
 
@@ -344,14 +345,14 @@
     if (f.w < 9 || f.h < 7) return [];
     const L = f.x, T = f.y, R = f.x + f.w, B = f.y + f.h;
     return [
-      { kind: 'sofa', x: L + 1, y: T + 3, len: 2 },
-      { kind: 'coffee', x: L + 2, y: T + 3, len: 2 },
-      { kind: 'mtable', x: R - 3, y: B - 3 },
-      { kind: 'tub', x: R - 4, y: B - 3 },
-      { kind: 'tub', x: R - 2, y: B - 3 },
-      { kind: 'tub', x: R - 3, y: B - 2 },
+      { kind: 'sofa', x: L + 1, y: T + 2, len: 2 },
+      { kind: 'coffee', x: L + 2, y: T + 2, len: 2 },
+      { kind: 'mtable', x: L + 3, y: B - 3 },
+      { kind: 'tub', x: L + 2, y: B - 3 },
+      { kind: 'tub', x: L + 4, y: B - 3 },
+      { kind: 'tub', x: L + 3, y: B - 2 },
       { kind: 'plant', x: L + 1, y: B - 2 },
-      { kind: 'plant', x: R - 2, y: T + 3 },
+      { kind: 'plant', x: R - 2, y: B - 2 },
     ];
   };
   // tile yang ditempati perabot tambahan (untuk grid jalan)
