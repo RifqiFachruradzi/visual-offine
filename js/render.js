@@ -452,10 +452,18 @@
       const div = s.divisions.find((x) => x.id === d.divisionId);
       if (!OPEN) walls(d.room, div ? div.color : '#888888', null);
       const members = VO.deptAgents(s, d.id);
-      if (luxe() && d.room.w >= 6) {
-        const cx = d.room.x + Math.floor(d.room.w / 2) - 1.2;
-        const wy = OPEN && div ? div.zone.y + 0.98 : d.room.y + 0.98; // di open plan: layar di dinding belakang divisi
-        add(cx + 2.5 + wy, (ctx, now) => wallChart(ctx, cx, wy, 2.4, members.some((m) => VO.sim.rt.get(m.id)?.working), now, div ? div.color : '#7fb2ff'));
+      if (luxe() && d.room.w >= 5) {
+        // papan tugas besar di dinding: daftar permintaan tugas dari atasan untuk departemen ini.
+        // Digambar per kolom (dipotong per tile) agar urutan kedalaman benar dengan direktur/kursi di depannya.
+        const bw = Math.min(d.room.w - 1, 6), bx = d.room.x + (d.room.w - bw) / 2;
+        const wy = OPEN && div ? div.zone.y + 0.98 : d.room.y + 0.98;
+        for (let c = Math.floor(bx); c < bx + bw; c++)
+          add(c + wy + 0.62, (ctx, now, st) => {
+            const L = iso(Math.max(c, bx), wy).x, Rt = iso(Math.min(c + 1, bx + bw), wy).x;
+            ctx.save(); ctx.beginPath(); ctx.rect(Math.min(L, Rt) - (c <= bx ? 4 : 0), -1e5, Math.abs(Rt - L) + (c <= bx ? 4 : 0) + (c + 1 >= bx + bw ? 4 : 0), 2e5); ctx.clip();
+            drawTaskBoard(ctx, bx, wy, bw, st, d, now, div ? div.color : '#7fb2ff');
+            ctx.restore();
+          });
       }
       VO.deskSlots(d.room).forEach((sl, i) => {
         // meja pertama milik ketua tim (manager): meja L khusus + kursi eksekutif sebagai pembeda
@@ -865,19 +873,47 @@
   }
 
   // Layar dinding departemen: grafik batang (bergerak saat tim bekerja)
-  function wallChart(ctx, x, y, w, busy, now, color) {
-    const b = box(ctx, x, y, x + w, y + 0.06, 18, 28, '#0d0f14', { outline: false });
-    facePanel(ctx, b.fL, 0.04, 0.96, 0.08, 0.92, '#111830');
-    const n = 7;
-    for (let i = 0; i < n; i++) {
-      const h = 0.18 + hash(x + i, y) * 0.5 + (busy ? Math.sin(now / 400 + i) * 0.08 : 0);
-      const u0 = 0.1 + i * (0.8 / n);
-      facePanel(ctx, b.fL, u0, u0 + 0.07, 0.16, 0.16 + Math.max(0.05, h), i % 2 ? color : '#ff6fb1');
-    }
-    ctx.strokeStyle = '#7fe0ff'; ctx.lineWidth = 1.2; ctx.beginPath();
-    for (let i = 0; i <= 8; i++) { const p = onFace(b.fL, 0.1 + i * 0.1, 0.5 + hash(i, x) * 0.3 + (busy ? Math.sin(now / 500 + i) * 0.04 : 0)); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
-    ctx.stroke(); ctx.lineWidth = 1;
+  // Tugas dari atasan yang relevan untuk departemen d (aktif dulu, lalu yang terbaru selesai)
+  function deptTasks(s, d) {
+    const ids = new Set(VO.deptAgents(s, d.id).map((a) => a.id));
+    const rel = s.tasks.filter((t) => t.targetType === 'all' || (t.targetType === 'division' && t.targetId === d.divisionId) || (t.targetType === 'dept' && t.targetId === d.id) || (t.targetType === 'agent' && ids.has(t.targetId)) || t.subtasks.some((st) => ids.has(st.agentId)));
+    const active = rel.filter((t) => !['done', 'failed'].includes(t.status));
+    const rest = rel.filter((t) => ['done', 'failed'].includes(t.status));
+    return [...active, ...rest].slice(0, 4).map((t) => {
+      const subs = t.subtasks.filter((st) => ids.has(st.agentId));
+      const prog = t.status === 'done' ? 1 : subs.length ? subs.reduce((a, st) => a + (st.status === 'done' ? 1 : st.progress || 0), 0) / subs.length : 0;
+      return { title: t.title, status: t.status, prog };
+    });
   }
+  const TB_STATUS = { briefing: ['BRIEFING', '#ffd166'], meeting: ['RAPAT', '#ffd166'], in_progress: ['DIKERJAKAN', '#5ec8ff'], done: ['SELESAI', '#7cf29a'], failed: ['GAGAL', '#ff6b6b'] };
+
+  // Layar papan tugas di dinding departemen
+  function drawTaskBoard(ctx, x, y, w, s, d, now, color) {
+    const b = box(ctx, x, y, x + w, y + 0.06, 12, 64, '#07090f', { outline: false });
+    const f = b.fL;
+    facePanel(ctx, f, 0.012, 0.988, 0.03, 0.97, '#0b1526');
+    facePanel(ctx, f, 0.012, 0.988, 0.81, 0.97, '#13233d');
+    facePanel(ctx, f, 0.012, 0.03, 0.03, 0.97, color); // aksen warna divisi
+    const rows = deptTasks(s, d);
+    const px = w * 32;
+    const F = (sz) => `bold ${sz}px Inter, system-ui, sans-serif`;
+    rows.forEach((r, i) => {
+      const top = 0.78 - i * 0.19;
+      const [lbl, col] = TB_STATUS[r.status] || ['-', '#9aa3b8'];
+      const pulse = r.status === 'in_progress' ? 0.6 + Math.sin(now / 300 + i) * 0.4 : 1;
+      ctx.save(); ctx.globalAlpha = pulse; facePanel(ctx, f, 0.045, 0.06, top - 0.09, top - 0.03, col); ctx.restore();
+      facePanel(ctx, f, 0.08, 0.96, top - 0.16, top - 0.14, '#1c2740');
+      facePanel(ctx, f, 0.08, 0.08 + 0.88 * Math.max(0.02, r.prog), top - 0.16, top - 0.14, col);
+      if (FLAT) return;
+      faceText(ctx, f, 0.08, top - 0.11, r.title, F(7.5), '#e8ecf5', px * 0.6);
+      faceText(ctx, f, 0.74, top - 0.11, lbl, F(5.5), col, px * 0.22);
+    });
+    if (FLAT) return;
+    faceText(ctx, f, 0.05, 0.86, 'TUGAS DARI ATASAN', F(6.5), '#ffd27a', px * 0.6);
+    faceText(ctx, f, 0.7, 0.86, d.name, F(6), '#9fb3d9', px * 0.27);
+    if (!rows.length) faceText(ctx, f, 0.08, 0.5, 'Belum ada tugas dari atasan', F(7), '#6f7fa3', px * 0.85);
+  }
+
 
   function drawDesk(ctx, x, y, now, ent, topColor, exec) {
     if (exec) return drawExecDesk(ctx, x, y, now, ent);
