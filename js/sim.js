@@ -14,6 +14,7 @@
   });
 
   /* ------------------------------------------------------------ grid */
+  const ZONE = { type: 'zone' };
   sim.buildGrid = function (s) {
     const w = s.map.w, h = s.map.h;
     const block = new Uint8Array(w * h);
@@ -36,11 +37,16 @@
         for (const l of VO.poolLoungers(f)) set(l.x, l.y);
       }
     }
+    const open = VO.openPlan(s);
+    if (open) for (const div of s.divisions) walls(div.zone, ZONE); // satu ruangan per divisi
     for (const d of s.departments) {
-      walls(d.room, null);
+      if (!open) walls(d.room, null);
       for (const slot of VO.deskSlots(d.room)) set(slot.desk.x, slot.desk.y);
     }
-    for (const div of s.divisions) set(div.directorDesk.x, div.directorDesk.y);
+    for (const div of s.divisions) {
+      set(div.directorDesk.x, div.directorDesk.y);
+      if (open) { set(div.directorDesk.x - 1, div.directorDesk.y); set(div.directorDesk.x + 1, div.directorDesk.y); } // meja eksekutif lebar
+    }
     const bs = VO.bossSeat(s);
     set(bs.desk.x, bs.desk.y); set(bs.desk.x - 1, bs.desk.y); set(bs.desk.x + 1, bs.desk.y);
     for (const f of s.furniture) set(f.x, f.y);
@@ -235,7 +241,7 @@
     if (!seat) return { x: 3, y: 3 };
     const n = (sim.visitorRot[superiorId] = ((sim.visitorRot[superiorId] || 0) + 1) % 5);
     const offs = [0, -1, 1, -2, 2][n];
-    const y = superiorId === 'boss' ? seat.desk.y + 1 : seat.desk.y + 2;
+    const y = VO.facesFront(s, e) ? seat.desk.y + 1 : seat.desk.y + 2;
     return sim.nearestFree({ x: seat.desk.x + offs, y });
   };
 

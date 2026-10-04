@@ -289,6 +289,7 @@
     $('speed').value = String(s.settings.speed || 1);
     $('rpm').value = String(s.settings.rpm || 10);
     $('floorSel').value = s.settings.floor;
+    $('layoutSel').value = VO.openPlan(s) ? 'open' : 'rooms';
     $('mapW').value = s.map.w;
     $('mapH').value = s.map.h;
     aiPill();
@@ -426,6 +427,13 @@
         app.select({ kind: 'facility', id: f.id }, true);
       }
     });
+    $('layoutSel').onchange = (e) => {
+      const s = app.state;
+      s.settings.layout = e.target.value;
+      for (const div of s.divisions) VO.placeDirector(s, div);
+      VO.log(s, e.target.value === 'open' ? 'Tata ruang: satu ruangan per divisi (open plan)' : 'Tata ruang: ruang terpisah per departemen', 'layout');
+      app.layoutChanged();
+    };
     $('floorSel').innerHTML = Object.entries(VO.FLOORS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
     $('floorSel').onchange = (e) => { app.state.settings.floor = e.target.value; app.layoutChanged(); };
     const mapSize = () => {
@@ -484,7 +492,7 @@
     for (const v of s.divisions) if (onHandle(v.zone)) return { kind: 'division', obj: v, rect: v.zone, resize: true };
     const fu = s.furniture.find((f) => f.x === tx && f.y === ty);
     if (fu) return { kind: 'furniture', obj: fu, rect: fu };
-    for (const v of s.divisions) if (v.directorDesk.x === tx && (v.directorDesk.y === ty || v.directorDesk.y + 1 === ty)) return { kind: 'dirdesk', obj: v, rect: v.directorDesk };
+    for (const v of s.divisions) if (v.directorDesk.x === tx && (v.directorDesk.y === ty || v.directorDesk.y + (VO.openPlan(s) ? -1 : 1) === ty)) return { kind: 'dirdesk', obj: v, rect: v.directorDesk };
     for (const d of s.departments) if (inR(d.room)) return { kind: 'dept', obj: d, rect: d.room };
     for (const f of s.facilities) if (inR(f)) return { kind: 'facility', obj: f, rect: f };
     for (const v of s.divisions) if (inR(v.zone)) return { kind: 'division', obj: v, rect: v.zone };

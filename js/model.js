@@ -121,7 +121,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'luxe', themeV3: true, themeV4: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'luxe', themeV3: true, themeV4: true, layout: 'open', layoutV5: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -310,6 +310,8 @@
   VO.doorTiles = function (room, facility) {
     const cx = room.x + Math.floor(room.w / 2);
     const doors = [{ x: cx, y: room.y + room.h - 1 }];
+    // ruangan divisi (open plan): pintu belakang di kiri agar tidak tepat di belakang meja direktur
+    if (facility && facility.type === 'zone') { doors.push({ x: room.x + 2, y: room.y }); return doors; }
     if (!facility || facility.type === 'meeting' || facility.type === 'lounge') doors.push({ x: cx, y: room.y });
     return doors;
   };
@@ -335,13 +337,25 @@
     return { x: f.x + 3, y: f.y + 3, w: Math.max(1, f.w - 6), h: Math.max(1, f.h - 6) };
   };
 
+  // Tata ruang: 'open' (default) = satu ruangan per divisi — direktur & semua timnya
+  // bekerja di ruangan yang sama, departemen ditandai karpet/kluster meja (tanpa dinding).
+  // 'rooms' = gaya lama, tiap departemen punya ruangan berdinding sendiri.
+  VO.openPlan = (s) => ((s && s.settings && s.settings.layout) || 'open') === 'open';
+  // Meja direktur: open plan → di depan-tengah ruangan, menghadap tim; gaya lama → pojok kiri atas
+  VO.placeDirector = function (s, div) {
+    const z = div.zone;
+    div.directorDesk = VO.openPlan(s) ? { x: z.x + Math.floor(z.w / 2), y: z.y + 2 } : { x: z.x + 2, y: z.y + 1 };
+  };
+  // Direktur di open plan duduk di belakang meja menghadap tim (seperti Boss)
+  VO.facesFront = (s, ent) => ent.id === 'boss' || (ent.isDirector && VO.openPlan(s));
+
   // Posisi kursi/meja setiap entitas (dipakai renderer + simulasi)
   VO.seatOf = function (s, ent) {
     if (ent.id === 'boss') return VO.bossSeat(s);
     if (ent.isDirector) {
       const div = s.divisions.find((d) => d.id === ent.divisionId);
       if (!div) return null;
-      return { desk: { ...div.directorDesk }, chair: { x: div.directorDesk.x, y: div.directorDesk.y + 1 } };
+      return { desk: { ...div.directorDesk }, chair: { x: div.directorDesk.x, y: div.directorDesk.y + (VO.openPlan(s) ? -1 : 1) } };
     }
     const dept = s.departments.find((d) => d.id === ent.deptId);
     if (!dept) return null;
@@ -370,7 +384,7 @@
       const zh = 5 + Math.max(4, ...sizes.map((z) => z.h));
       if (cx + zw > maxW && cx > 2) { cx = 2; cy += rowH + 2; rowH = 0; }
       VO.setZone(s, div, { x: cx, y: cy, w: zw, h: zh }, false);
-      div.directorDesk = { x: cx + 2, y: cy + 1 };
+      VO.placeDirector(s, div);
       let rx = cx + 1;
       depts.forEach((d, i) => {
         d.room = { x: rx, y: cy + 4, w: sizes[i].w, h: sizes[i].h };
@@ -414,6 +428,7 @@
     const needV2 = !(s.settings && s.settings.modelsV2);
     const needV3 = !(s.settings && s.settings.themeV3);
     const needV4 = !(s.settings && s.settings.themeV4);
+    const needV5 = !(s.settings && s.settings.layoutV5);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -427,6 +442,8 @@
     if (needV3) { s.settings.theme = 'classic'; s.settings.themeV3 = true; }
     // v4: tampilan default berganti ke Penthouse (kantor mewah malam hari)
     if (needV4) { s.settings.theme = 'luxe'; s.settings.themeV4 = true; }
+    // v5: tata ruang open plan — direktur pindah ke depan-tengah ruangan divisinya
+    if (needV5) { s.settings.layout = 'open'; s.settings.layoutV5 = true; for (const div of s.divisions) if (div.zone) VO.placeDirector(s, div); }
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');

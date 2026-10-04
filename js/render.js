@@ -284,7 +284,7 @@
       ctx.lineWidth = 2; poly(ctx, diamond(x + 0.12, y + 0.12, w - 0.24, h - 0.24), null, edge); ctx.lineWidth = 1;
     };
     for (const d of s.departments) rug(d.room.x + 0.7, d.room.y + 1.3, d.room.w - 1.4, d.room.h - 2, LX.rug, LX.rugEdge);
-    for (const div of s.divisions) rug(div.directorDesk.x - 1.2, div.directorDesk.y - 0.4, 3.4, 2.8, '#33283e', '#5b4870');
+    for (const div of s.divisions) rug(div.directorDesk.x - 1.4, div.directorDesk.y - (VO.openPlan(s) ? 1.5 : 0.4), 3.8, 2.9, '#33283e', '#5b4870');
     for (const f of s.facilities) {
       if (f.type === 'boss') rug(f.x + 1.6, f.y + 1.6, f.w - 3.2, f.h - 3, '#5e2229', LX.gold);
       if (f.type === 'lounge') rug(f.x + 1.5, f.y + 1.5, f.w - 3, f.h - 3, '#d8c6a4', '#b89f76');
@@ -449,13 +449,17 @@
       walls(f, f.color, f);
       facilityProps(s, f, add);
     }
+    const OPEN = VO.openPlan(s);
+    // open plan: satu ruangan untuk tiap divisi (direktur + semua departemennya)
+    if (OPEN) for (const div of s.divisions) walls(div.zone, div.color, { type: 'zone' });
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      walls(d.room, div ? div.color : '#888888', null);
+      if (!OPEN) walls(d.room, div ? div.color : '#888888', null);
       const members = VO.deptAgents(s, d.id);
       if (luxe() && d.room.w >= 6) {
         const cx = d.room.x + Math.floor(d.room.w / 2) - 1.2;
-        add(cx + 2.5 + d.room.y + 1.0, (ctx, now) => wallChart(ctx, cx, d.room.y + 0.98, 2.4, members.some((m) => VO.sim.rt.get(m.id)?.working), now, div ? div.color : '#7fb2ff'));
+        const wy = OPEN && div ? div.zone.y + 0.98 : d.room.y + 0.98; // di open plan: layar di dinding belakang divisi
+        add(cx + 2.5 + wy, (ctx, now) => wallChart(ctx, cx, wy, 2.4, members.some((m) => VO.sim.rt.get(m.id)?.working), now, div ? div.color : '#7fb2ff'));
       }
       VO.deskSlots(d.room).forEach((sl, i) => {
         add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#ffffff' : '#a47148'));
@@ -465,7 +469,11 @@
     }
     for (const div of s.divisions) {
       const dd = div.directorDesk;
-      add(dd.x + dd.y + 1, (ctx, now) => drawDesk(ctx, dd.x, dd.y, now, VO.director(s, div.id), robot() ? '#e6e9fb' : modern() ? '#ece8f5' : '#6d4c7d'));
+      add(dd.x + dd.y + 1, (ctx, now) => drawDesk(ctx, dd.x, dd.y, now, VO.director(s, div.id), robot() ? '#e6e9fb' : modern() ? '#ece8f5' : '#6d4c7d', OPEN));
+      if (OPEN) { // kursi eksekutif di belakang meja, direktur menghadap timnya
+        add(dd.x + dd.y - 1 + 0.8, (ctx) => drawExecChair(ctx, dd.x, dd.y - 1));
+        continue;
+      }
       add(dd.x + dd.y + 1.9, (ctx) => drawChair(ctx, dd.x, dd.y + 1));
       add(dd.x + dd.y + 2.3, (ctx) => drawChairBack(ctx, dd.x, dd.y + 1));
     }
@@ -522,11 +530,7 @@
           }
         });
       // kursi boss (sandaran di belakang, boss menghadap ke depan)
-      add(seat.chair.x + seat.chair.y + 0.8, (ctx) => {
-        const cx = seat.chair.x, cy = seat.chair.y;
-        box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : classic() ? CL.chairBack : '#3b2418');
-        box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : '#5a3826');
-      });
+      add(seat.chair.x + seat.chair.y + 0.8, (ctx) => drawExecChair(ctx, seat.chair.x, seat.chair.y));
       add(f.x + 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'bookshelf', x: f.x + 1, y: f.y + 1 }));
       add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'plant', x: f.x + f.w - 2, y: f.y + 1 }));
     } else if (f.type === 'meeting') {
@@ -590,6 +594,12 @@
       for (const [lx, ly] of [[w.x - 0.6, w.y - 0.6], [w.x + w.w + 0.3, w.y - 0.6], [w.x - 0.6, w.y + w.h + 0.3], [w.x + w.w + 0.3, w.y + w.h + 0.3]])
         add(lx + ly + 0.6, (ctx) => drawGardenLamp(ctx, lx, ly));
     }
+  }
+
+  // Kursi eksekutif: sandaran tinggi di belakang (sisi -ty), duduk menghadap ke depan
+  function drawExecChair(ctx, cx, cy) {
+    box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : classic() ? CL.chairBack : luxe() ? '#1b1d22' : '#3b2418');
+    box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : luxe() ? '#26282f' : '#5a3826');
   }
 
   function drawLounger(ctx, x, y) {
@@ -668,7 +678,8 @@
     ctx.stroke(); ctx.lineWidth = 1;
   }
 
-  function drawDesk(ctx, x, y, now, ent, topColor) {
+  function drawDesk(ctx, x, y, now, ent, topColor, exec) {
+    if (exec) return drawExecDesk(ctx, x, y, now, ent);
     if (luxe()) return drawDeskLuxe(ctx, x, y, now, ent);
     if (modern()) { // meja putih dengan kaki ramping
       box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 12, 3, { top: topColor, left: '#dde1e8', right: '#cdd2db' }, { outline: false });
@@ -704,6 +715,22 @@
     // keyboard & cangkir
     poly(ctx, diamond(x + 0.3, y + 0.55, 0.4, 0.14, 15), '#d9dce3');
     box(ctx, x + 0.8, y + 0.2, x + 0.88, y + 0.28, 15, 5, '#ffffff', { outline: false });
+  }
+
+  // Meja eksekutif direktur (open plan): meja lebar, laptop menghadap direktur, tanaman kecil
+  function drawExecDesk(ctx, x, y, now, ent) {
+    const col = luxe() ? LX.walnut : robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : modern() ? { top: '#ffffff', left: '#dde1e8', right: '#cdd2db' } : { top: '#6d4c7d', left: '#553a62', right: '#45304f' };
+    const d = box(ctx, x - 0.35, y + 0.12, x + 1.35, y + 0.88, 0, 16, col);
+    facePanel(ctx, d.fL, 0, 1, 0.8, 0.9, luxe() ? LX.gold : 'rgba(0,0,0,0.12)');
+    const rt = ent && VO.sim.rt.get(ent.id);
+    // laptop: layar di sisi belakang meja (menghadap direktur), terlihat dari depan sebagai punggung laptop
+    box(ctx, x + 0.25, y + 0.3, x + 0.75, y + 0.62, 16, 1.5, '#c9ccd3', { outline: false });
+    const lid = box(ctx, x + 0.25, y + 0.28, x + 0.75, y + 0.32, 17, 13, '#b9bcc4', { outline: false });
+    facePanel(ctx, lid.fL, 0.42, 0.58, 0.45, 0.6, rt && rt.working ? '#7fe0ff' : '#e4e6ea');
+    poly(ctx, diamond(x - 0.15, y + 0.35, 0.3, 0.35, 16), '#f5f5f5'); // dokumen
+    const p = iso(x + 1.1, y + 0.45, 16); // tanaman kecil
+    ctx.fillStyle = '#3f9a4a'; ctx.beginPath(); ctx.arc(p.x, p.y - 6, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2f7a3a'; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 9, 3.5, 0, 7); ctx.fill();
   }
 
   // Meja kayu walnut dengan dua monitor (layar grafik menyala saat bekerja)
@@ -1197,7 +1224,7 @@
     const moving = rt.cur && rt.cur.type === 'goto' && rt.path && rt.path.length > 0;
     let back = false, mirror = false;
     if (rt.sitting) {
-      if (ent.id === 'boss') { back = false; mirror = true; } // boss menghadap ke depan (+ty)
+      if (VO.facesFront(s, ent)) { back = false; mirror = true; } // boss & direktur open plan menghadap ke depan (+ty)
       else { back = true; mirror = false; } // karyawan menghadap meja (-ty)
     } else if (rt.mdx != null) {
       const sx = rt.mdx - rt.mdy, sy = rt.mdx + rt.mdy; // arah di layar
@@ -1241,8 +1268,8 @@
       ctx.fillStyle = '#fff'; ctx.fillText(label, p.x + 17, p.y + 4);
     }
     ctx.font = 'bold 11px Inter, system-ui, sans-serif';
-    const plate = (r, text, color) => {
-      const p = iso(r.x + 1.2, r.y + 1, 50);
+    const plate = (r, text, color, z = 50) => {
+      const p = iso(r.x + 1.2, r.y + 1, z);
       const tw = ctx.measureText(text).width + 14;
       ctx.fillStyle = color; rr(ctx, p.x - 4, p.y - 9, tw, 17, 5); ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.stroke();
@@ -1251,7 +1278,7 @@
     for (const f of s.facilities) plate(f, f.name, f.color);
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      plate(d.room, d.name, div ? div.color : '#888888');
+      plate(d.room, d.name, div ? div.color : '#888888', VO.openPlan(s) ? 22 : 50);
     }
   }
 
@@ -1272,7 +1299,7 @@
     for (const f of s.facilities) plate(f, f.name, LX.gold, FI[f.type] || 'door', f.type === 'pool' ? 24 : 74);
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);
-      plate(d.room, d.name, div ? div.color : LX.gold, VO.integ && VO.integ.forDept(s, d)?.icon || 'building');
+      plate(d.room, d.name, div ? div.color : LX.gold, VO.integ && VO.integ.forDept(s, d)?.icon || 'building', VO.openPlan(s) ? 26 : 74);
     }
   }
 

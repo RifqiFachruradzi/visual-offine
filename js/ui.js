@@ -83,7 +83,7 @@
     const w = T ? T.departments.length * 10 + 1 : 14;
     const spot = app().findFreeRect(w, 11);
     VO.setZone(s, div, { x: spot.x, y: spot.y, w, h: 11 }, false);
-    div.directorDesk = { x: spot.x + 2, y: spot.y + 1 };
+    VO.placeDirector(s, div);
     if (T) {
       T.departments.forEach((td, i) => {
         const dept = VO.addDepartment(s, div.id, { name: td.name });
