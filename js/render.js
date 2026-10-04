@@ -251,7 +251,7 @@
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
     };
     for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.07));
-    const FAC = { boss: '#7d5032', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a' };
+    const FAC = { boss: '#7d5032', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a', billiard: '#6f4a2f' };
     for (const f of s.facilities) setRect(f, FAC[f.type] || LX.woodA);
     const marble = new Set();
     for (let y = 0; y < s.map.h; y++)
@@ -288,6 +288,7 @@
     for (const f of s.facilities) {
       if (f.type === 'boss') rug(f.x + 1.6, f.y + 1.6, f.w - 3.2, f.h - 3, '#5e2229', LX.gold);
       if (f.type === 'lounge') rug(f.x + 1.5, f.y + 1.5, f.w - 3, f.h - 3, '#d8c6a4', '#b89f76');
+      if (f.type === 'billiard') { const b = VO.billiardTable(f); rug(b.x - 1.2, b.y - 1.2, b.w + 2.4, b.h + 2.4, '#3b2230', LX.gold); }
     }
     // garis emas tipis batas zona divisi
     ctx.lineWidth = 1.5;
@@ -584,6 +585,8 @@
         poly(ctx, diamond(f.x + 3.2, f.y + 2.8, 0.4, 0.3, 8), '#f5f5f5');
         return b;
       });
+    } else if (f.type === 'billiard') {
+      billiardProps(s, f, add);
     } else if (f.type === 'pool') {
       const w = VO.poolWater(f);
       VO.poolLoungers(f).forEach((l, i) => {
@@ -600,6 +603,68 @@
   function drawExecChair(ctx, cx, cy) {
     box(ctx, cx + 0.2, cy + 0.15, cx + 0.8, cy + 0.3, 0, 30, robot() ? '#1f2aa8' : classic() ? CL.chairBack : luxe() ? '#1b1d22' : '#3b2418');
     box(ctx, cx + 0.22, cy + 0.25, cx + 0.78, cy + 0.8, 7, 5, robot() ? NAVY : classic() ? CL.chair : luxe() ? '#26282f' : '#5a3826');
+  }
+
+  // Meja biliar: digambar per tile (kaki, badan kayu, rel, kain hijau, lubang) agar
+  // urutan kedalaman benar dengan pemain di sekelilingnya; bola & lampu gantung sesudahnya
+  function billiardProps(s, f, add) {
+    const t = VO.billiardTable(f);
+    const WOOD = luxe() ? LX.walnut : classic() ? { top: '#8a5a36', left: '#6e4528', right: '#5a381f' } : robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : { top: '#7a4f30', left: '#5e3c24', right: '#4b2f1c' };
+    const FELT = '#1f8a4c', FELT2 = '#1a7743', Z = 17;
+    for (let y = t.y; y < t.y + t.h; y++)
+      for (let x = t.x; x < t.x + t.w; x++)
+        add(x + y + 1, (ctx) => {
+          const L = x === t.x, Rt = x === t.x + t.w - 1, Tp = y === t.y, B = y === t.y + t.h - 1;
+          const x0 = x + (L ? 0.05 : 0), x1 = x + 1 - (Rt ? 0.05 : 0), y0 = y + (Tp ? 0.05 : 0), y1 = y + 1 - (B ? 0.05 : 0);
+          for (const [cx, cy, on] of [[x0 + 0.1, y0 + 0.1, L && Tp], [x1 - 0.22, y0 + 0.1, Rt && Tp], [x0 + 0.1, y1 - 0.22, L && B], [x1 - 0.22, y1 - 0.22, Rt && B]])
+            if (on) box(ctx, cx, cy, cx + 0.12, cy + 0.12, 0, 11, WOOD, { outline: false }); // kaki
+          box(ctx, x0, y0, x1, y1, 11, Z - 11, WOOD, { outline: false }); // badan & rel
+          const fx0 = x0 + (L ? 0.16 : 0), fx1 = x1 - (Rt ? 0.16 : 0), fy0 = y0 + (Tp ? 0.16 : 0), fy1 = y1 - (B ? 0.16 : 0);
+          poly(ctx, diamond(fx0, fy0, fx1 - fx0, fy1 - fy0, Z), (x + y) % 2 ? FELT : FELT2);
+          if (Tp) poly(ctx, diamond(fx0, fy0, fx1 - fx0, 0.05, Z), 'rgba(0,0,0,0.18)'); // bayangan rel
+          if (L) poly(ctx, diamond(fx0, fy0, 0.05, fy1 - fy0, Z), 'rgba(0,0,0,0.18)');
+          const pocket = (px, py) => { const p = iso(px, py, Z); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 3.6, 2.2, 0, 0, 7); ctx.fill(); };
+          if (L && Tp) pocket(x0 + 0.14, y0 + 0.14);
+          if (Rt && Tp) pocket(x1 - 0.14, y0 + 0.14);
+          if (L && B) pocket(x0 + 0.14, y1 - 0.14);
+          if (Rt && B) pocket(x1 - 0.14, y1 - 0.14);
+          if (x === t.x + 1 && Tp) pocket(x + 0.5, y0 + 0.12);
+          if (x === t.x + 1 && B) pocket(x + 0.5, y1 - 0.12);
+        });
+    // bola: segitiga di kanan, bola putih bergulir pelan di kiri
+    const k = t.x + t.y + t.w + t.h - 1;
+    add(k + 0.02, (ctx, now) => {
+      const cyy = t.y + t.h / 2;
+      const rack = [[0, 0], [0.13, -0.08], [0.13, 0.08], [0.26, -0.16], [0.26, 0], [0.26, 0.16], [0.39, -0.08], [0.39, 0.08], [0.39, 0.24], [0.39, -0.24]];
+      const COLS = ['#f9d71c', '#1e5bd8', '#d62828', '#6a2c91', '#111111', '#f77f00', '#1b7f3b', '#7b2d26', '#f9d71c', '#1e5bd8'];
+      const ball = (bx, by, c) => {
+        const p = iso(bx, by, Z);
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x + 1, p.y + 0.5, 2.8, 1.4, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(p.x, p.y - 2.2, 2.7, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(p.x - 0.9, p.y - 3.1, 0.9, 0, 7); ctx.fill();
+      };
+      rack.forEach(([dx, dy], i) => ball(t.x + t.w - 1.05 + dx, cyy + dy, COLS[i]));
+      ball(t.x + 0.75 + Math.sin(now / 1800) * 0.25, cyy + Math.sin(now / 2600) * 0.3, '#fafafa');
+    });
+    // lampu gantung di atas meja (3D)
+    add(k + 0.04, (ctx) => {
+      if (FLAT) return;
+      const c = iso(t.x + t.w / 2, t.y + t.h / 2, 0);
+      const g = ctx.createRadialGradient(c.x, c.y - Z, 0, c.x, c.y - Z, 60);
+      g.addColorStop(0, 'rgba(255,236,170,0.28)'); g.addColorStop(1, 'rgba(255,236,170,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c.x, c.y - Z, 62, 31, 0, 0, 7); ctx.fill();
+      const top = iso(t.x + t.w / 2, t.y + t.h / 2, 112);
+      ctx.strokeStyle = '#2a2b30'; ctx.beginPath(); ctx.moveTo(top.x, top.y - 30); ctx.lineTo(top.x, top.y); ctx.stroke();
+      box(ctx, t.x + 0.55, t.y + 0.85, t.x + t.w - 0.55, t.y + t.h - 0.85, 104, 6, { top: '#1f5b38', left: '#17472b', right: '#123a23' }, { outline: false });
+      for (const u of [0.2, 0.5, 0.8]) { const p = iso(t.x + 0.55 + (t.w - 1.1) * u, t.y + t.h - 0.85, 104); ctx.fillStyle = '#fff1c4'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 4, 1.6, 0, 0, 7); ctx.fill(); }
+    });
+    // rak stik biliar di dinding belakang
+    add(f.x + 2.5 + f.y + 1.6, (ctx) => {
+      const b = box(ctx, f.x + 1.2, f.y + 0.95, f.x + 2.4, f.y + 1.02, 10, 44, WOOD, { outline: false });
+      ctx.strokeStyle = '#d9b98a'; ctx.lineWidth = 1.6;
+      for (let i = 0; i < 5; i++) { const a = onFace(b.fL, 0.15 + i * 0.17, 0.06), c2 = onFace(b.fL, 0.15 + i * 0.17, 0.95); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c2.x, c2.y); ctx.stroke(); }
+      ctx.lineWidth = 1;
+    });
   }
 
   function drawLounger(ctx, x, y) {
@@ -1295,7 +1360,7 @@
       ctx.fillStyle = '#f4efe6'; ctx.fillText(text, p.x + 16, p.y + 4);
     };
     for (const div of s.divisions) plate({ x: div.zone.x, y: div.zone.y - 0.4 }, div.name, div.color, 'layers', 30);
-    const FI = { boss: 'crown', meeting: 'meeting', pantry: 'coffee', lounge: 'sofa', pool: 'droplet' };
+    const FI = { boss: 'crown', meeting: 'meeting', pantry: 'coffee', lounge: 'sofa', pool: 'droplet', billiard: 'gamepad' };
     for (const f of s.facilities) plate(f, f.name, LX.gold, FI[f.type] || 'door', f.type === 'pool' ? 24 : 74);
     for (const d of s.departments) {
       const div = s.divisions.find((x) => x.id === d.divisionId);

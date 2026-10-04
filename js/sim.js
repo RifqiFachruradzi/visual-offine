@@ -31,6 +31,10 @@
         for (let y = t.y; y < t.y + t.h; y++) for (let x = t.x; x < t.x + t.w; x++) set(x, y);
       }
       if (f.type === 'pantry') for (let x = f.x + 1; x < f.x + f.w - 1; x++) set(x, f.y + 1);
+      if (f.type === 'billiard') {
+        const b = VO.billiardTable(f);
+        for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) set(x, y);
+      }
       if (f.type === 'pool') {
         const w = VO.poolWater(f);
         for (let y = w.y; y < w.y + w.h; y++) for (let x = w.x; x < w.x + w.w; x++) set(x, y);
@@ -249,8 +253,8 @@
     const out = [];
     for (const f of s.facilities.filter((f) => f.type === type)) {
       if (type === 'pantry') for (let x = f.x + 1; x < f.x + f.w - 1; x++) out.push({ x, y: f.y + 2 });
-      else if (type === 'meeting') {
-        const t = VO.meetingTable(f);
+      else if (type === 'meeting' || type === 'billiard') {
+        const t = type === 'meeting' ? VO.meetingTable(f) : VO.billiardTable(f);
         for (let x = t.x; x < t.x + t.w; x++) { out.push({ x, y: t.y - 1 }); out.push({ x, y: t.y + t.h }); }
         for (let y = t.y; y < t.y + t.h; y++) { out.push({ x: t.x - 1, y }); out.push({ x: t.x + t.w, y }); }
       } else for (let y = f.y + 2; y < f.y + f.h - 1; y++) for (let x = f.x + 1; x < f.x + f.w - 1; x++) out.push({ x, y });
@@ -345,7 +349,11 @@
     if (r < 0.3) {
       const spot = VO.pick(sim.spots(s, 'pantry'));
       if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(3, 6), 'coffee', VO.pick(['Ngopi dulu', 'Snack time', 'Refill kafein'])), ...home], { ambient: true });
-    } else if (r < 0.42 && (s.facilities.some((f) => f.type === 'pool' || f.type === 'lounge'))) {
+    } else if (r < 0.37 && s.facilities.some((f) => f.type === 'billiard')) {
+      // main biliar di sisi meja
+      const spot = VO.pick(sim.spots(s, 'billiard'));
+      if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(5, 9), 'break', VO.pick(['Main biliar dulu', 'Bola 8 masuk!', 'Giliranmu', 'Nice shot!'])), ...home], { ambient: true });
+    } else if (r < 0.44 && (s.facilities.some((f) => f.type === 'pool' || f.type === 'lounge'))) {
       // rehat sebentar di kolam renang / lounge
       const spot = VO.pick([...sim.spots(s, 'pool'), ...sim.spots(s, 'lounge')]);
       if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(4, 8), 'break', VO.pick(['Cari angin dulu', 'Rehat sebentar', 'Lihat pemandangan', 'Brainstorm santai'])), ...home], { ambient: true });

@@ -49,6 +49,7 @@
     pantry: { label: 'Pantry', w: 9, h: 8, color: '#6a994e' },
     lounge: { label: 'Lounge', w: 9, h: 8, color: '#9d4edd' },
     pool: { label: 'Kolam Renang', w: 12, h: 9, color: '#1e88e5' },
+    billiard: { label: 'Ruang Biliar', w: 9, h: 8, color: '#2e7d32' },
   };
 
   VO.FLOORS = {
@@ -134,7 +135,7 @@
       docs: [],
       log: [],
     };
-    for (const t of ['boss', 'meeting', 'pantry', 'pool']) VO.addFacility(s, t);
+    for (const t of ['boss', 'meeting', 'pantry', 'pool', 'billiard']) VO.addFacility(s, t);
     return s;
   };
 
@@ -333,6 +334,11 @@
     return out;
   };
 
+  // Meja biliar 3×2 tile di tengah ruangan
+  VO.billiardTable = function (f) {
+    return { x: f.x + Math.floor((f.w - 3) / 2), y: f.y + Math.floor((f.h - 2) / 2) + 1, w: 3, h: 2 };
+  };
+
   VO.meetingTable = function (f) {
     return { x: f.x + 3, y: f.y + 3, w: Math.max(1, f.w - 6), h: Math.max(1, f.h - 6) };
   };
@@ -367,7 +373,7 @@
   VO.autoLayout = function (s) {
     // Fasilitas di baris atas
     let x = 2;
-    const order = ['boss', 'meeting', 'pantry', 'lounge', 'pool'];
+    const order = ['boss', 'meeting', 'pantry', 'lounge', 'pool', 'billiard'];
     const facs = [...s.facilities].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
     for (const f of facs) {
       f.x = x; f.y = 2; x += f.w + 1;

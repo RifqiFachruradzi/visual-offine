@@ -105,6 +105,12 @@
       if (!s.facilities.some((f) => f.type === 'pool')) { const d = VO.FACILITY_TYPES.pool; VO.addFacility(s, 'pool', app.findFreeRect(d.w, d.h)); }
       app._saveDirty = true;
     }
+    // fasilitas baru: ruang biliar (sekali untuk kantor lama)
+    if (!s.settings.billiardV6) {
+      s.settings.billiardV6 = true;
+      if (!s.facilities.some((f) => f.type === 'billiard')) { const d = VO.FACILITY_TYPES.billiard; VO.addFacility(s, 'billiard', app.findFreeRect(d.w, d.h)); }
+      app._saveDirty = true;
+    }
     syncBoss();
     sim.sync(s);
 
@@ -481,7 +487,7 @@
   }
 
   /* ------------------------------------------------------------ kanvas: kamera & editor */
-  const MIN = { boss: [7, 6], meeting: [8, 7], pantry: [6, 5], lounge: [6, 5], pool: [9, 7] };
+  const MIN = { boss: [7, 6], meeting: [8, 7], pantry: [6, 5], lounge: [6, 5], pool: [9, 7], billiard: [7, 6] };
 
   function hitTest(s, wx, wy) {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
