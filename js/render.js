@@ -33,7 +33,7 @@
   const luxe = () => theme() === 'luxe';
   R.isLuxe = luxe;
   const LX = {
-    woodA: '#0d0d0f', woodB: '#111114', plank: 'rgba(255,255,255,0.045)', edgeL: '#050506', edgeR: '#000000',
+    woodA: '#0d0d0f', woodB: '#111114', plank: 'rgba(255,255,255,0.045)', edgeL: '#0e121b', edgeR: '#090c13',
     rug: '#26304a', rugEdge: '#3d4a6d', walnut: { top: '#6b4429', left: '#4f311d', right: '#3e2616' },
     chair: '#1f2127', chairBack: '#17191e', gold: '#d6a95b', frame: '#23262e',
   };
@@ -250,36 +250,22 @@
     const setRect = (r, color, inset = 0) => {
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
     };
-    for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.04));
-    const FAC = { boss: 'tech', meeting: '#121215', pantry: 'marble', lounge: '#101013', pool: '#0f0f12', billiard: '#0e0e11' };
-    for (const f of s.facilities) setRect(f, FAC[f.type] || LX.woodA);
+    for (const div of s.divisions) setRect(div.zone, 'z:' + div.color);
+    const FAC = { pantry: 'marble' }; // ruangan lain memakai lantai panel seperti Ruang Boss
+    for (const f of s.facilities) setRect(f, FAC[f.type] || 'tech');
     const marble = new Set();
     for (let y = 0; y < s.map.h; y++)
       for (let x = 0; x < s.map.w; x++) {
         const c = tint.get(x + ',' + y);
-        if (c === 'tech') { // lantai panel gelap dengan garis cahaya
-          poly(ctx, diamond(x, y), (x + y) % 2 ? '#161b27' : '#141924', 'rgba(53,224,255,0.12)');
-          continue;
-        }
         if (c === 'marble') {
           marble.add(x + ',' + y);
           poly(ctx, diamond(x, y), (x + y) % 2 ? '#ece6dc' : '#ddd4c6', 'rgba(120,100,80,0.12)');
           continue;
         }
-        const base = c || LX.woodA;
-        poly(ctx, diamond(x, y), (x * 3 + y) % 4 === 0 ? shade(base, 0.96) : base);
-        // papan kayu searah sumbu x, sambungan berselang-seling
-        ctx.strokeStyle = LX.plank; ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let k = 0; k < 3; k++) {
-          const v0 = y + k / 3, v1 = y + (k + 1) / 3;
-          const a = iso(x, v1), b = iso(x + 1, v1);
-          ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-          const u = x + hash(x + k * 0.37, y);
-          const j0 = iso(u, v0), j1 = iso(u, v1);
-          ctx.moveTo(j0.x, j0.y); ctx.lineTo(j1.x, j1.y);
-        }
-        ctx.stroke();
+        // lantai panel gelap bergaris cahaya cyan (sama dengan Ruang Boss); zona divisi diberi sedikit warna divisi
+        let a = '#161b27', b = '#141924';
+        if (c && c.startsWith('z:')) { a = mix(a, c.slice(2), 0.06); b = mix(b, c.slice(2), 0.06); }
+        poly(ctx, diamond(x, y), (x + y) % 2 ? a : b, 'rgba(53,224,255,0.12)');
       }
     // karpet: biru tua di area kerja, merah anggur di ruang Boss, krem di lounge
     const rug = (x, y, w, h, fill, edge) => {
