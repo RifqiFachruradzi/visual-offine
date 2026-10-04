@@ -59,10 +59,10 @@
   const rects = (s) => [...s.facilities, ...s.departments.map((d) => d.room), ...s.divisions.map((d) => d.zone)];
   const overlap = (a, b, m = 1) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
 
-  app.findFreeRect = function (w, h) {
+  app.findFreeRect = function (w, h, minY = 2) {
     const s = app.state;
     const all = rects(s);
-    for (let y = 2; y + h < s.map.h - 1; y++)
+    for (let y = minY; y + h < s.map.h - 1; y++)
       for (let x = 2; x + w < s.map.w - 1; x++) {
         const r = { x, y, w, h };
         if (!all.some((o) => overlap(r, o))) return r;
@@ -235,11 +235,11 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
-  const THEMES = ['luxe', 'classic', 'robot', 'modern', 'pixel'];
-  const THEME_LABEL = { luxe: 'Penthouse (malam)', classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
-  const THEME_ICON = { luxe: 'star', classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
+  const THEMES = ['studio', 'luxe', 'classic', 'robot', 'modern', 'pixel'];
+  const THEME_LABEL = { studio: 'Studio (2 lantai)', luxe: 'Penthouse (malam)', classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
+  const THEME_ICON = { studio: 'layers', luxe: 'star', classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
   function applyTheme() {
-    const t = app.state.settings.theme || 'luxe';
+    const t = app.state.settings.theme || 'studio';
     document.body.classList.toggle('light', t !== 'pixel' && t !== 'luxe');
     document.body.classList.toggle('luxe', t === 'luxe');
     const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
@@ -337,9 +337,9 @@
     $('view3d').onclick = () => app.setView('3d');
     $('btnTheme').onclick = () => {
       const st = s().settings;
-      st.theme = THEMES[(THEMES.indexOf(st.theme || 'luxe') + 1) % THEMES.length];
+      st.theme = THEMES[(THEMES.indexOf(st.theme || 'studio') + 1) % THEMES.length];
       applyTheme();
-      R.staticDirty = true;
+      app.layoutChanged(); // tema Studio mengubah grid jalan (mezanin & tangga)
       app.changed();
       VO.ui.toast('Tampilan ' + THEME_LABEL[st.theme], THEME_ICON[st.theme]);
     };

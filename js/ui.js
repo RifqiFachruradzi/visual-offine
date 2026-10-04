@@ -81,7 +81,8 @@
     const dirRole = !v.director ? null : T && v.director === 'Direktur' ? T.director.role : v.director;
     const div = VO.addDivision(s, { name, color: T && v.color[0] === VO.PALETTE[(s.divisions.length) % VO.PALETTE.length] ? T.color : v.color[0], directorRole: dirRole, directorPrompt: T && dirRole ? T.director.prompt : undefined, integration: T ? 'minimarket' : undefined });
     const w = T ? T.departments.length * 10 + 1 : 14;
-    const spot = app().findFreeRect(w, 11);
+    const mz = VO.mezz(s);
+    const spot = app().findFreeRect(w, 11, mz ? mz.M + 3 : 2); // tema Studio: divisi di lantai 1 (di bawah mezanin)
     VO.setZone(s, div, { x: spot.x, y: spot.y, w, h: 11 }, false);
     VO.placeDirector(s, div);
     if (T) {

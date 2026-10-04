@@ -43,9 +43,14 @@
       }
     }
     const open = VO.openPlan(s);
-    if (open) for (const div of s.divisions) walls(div.zone, ZONE); // satu ruangan per divisi
+    const mz = VO.mezz(s);
+    if (open && !mz) for (const div of s.divisions) walls(div.zone, ZONE); // satu ruangan per divisi
+    if (mz) { // tema Studio: tepi mezanin berpagar, hanya bisa turun lewat tangga
+      for (let x = 0; x < w; x++) if (x < mz.sx || x > mz.sx + 1) set(x, mz.M);
+      for (const y of [mz.M + 1, mz.M + 2]) { set(mz.sx - 1, y); set(mz.sx + 2, y); }
+    }
     for (const d of s.departments) {
-      if (!open) walls(d.room, null);
+      if (!open && !mz) walls(d.room, null);
       for (const slot of VO.deskSlots(d.room)) set(slot.desk.x, slot.desk.y);
     }
     for (const div of s.divisions) {
