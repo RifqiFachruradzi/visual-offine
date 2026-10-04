@@ -33,7 +33,7 @@
   const luxe = () => theme() === 'luxe';
   R.isLuxe = luxe;
   const LX = {
-    woodA: '#b48558', woodB: '#ad7f52', plank: 'rgba(70,35,10,0.2)', edgeL: '#3a2618', edgeR: '#28190f',
+    woodA: '#0d0d0f', woodB: '#111114', plank: 'rgba(255,255,255,0.045)', edgeL: '#050506', edgeR: '#000000',
     rug: '#26304a', rugEdge: '#3d4a6d', walnut: { top: '#6b4429', left: '#4f311d', right: '#3e2616' },
     chair: '#1f2127', chairBack: '#17191e', gold: '#d6a95b', frame: '#23262e',
   };
@@ -250,8 +250,8 @@
     const setRect = (r, color, inset = 0) => {
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
     };
-    for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.07));
-    const FAC = { boss: 'tech', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a', billiard: '#6f4a2f' };
+    for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.04));
+    const FAC = { boss: 'tech', meeting: '#121215', pantry: 'marble', lounge: '#101013', pool: '#0f0f12', billiard: '#0e0e11' };
     for (const f of s.facilities) setRect(f, FAC[f.type] || LX.woodA);
     const marble = new Set();
     for (let y = 0; y < s.map.h; y++)
