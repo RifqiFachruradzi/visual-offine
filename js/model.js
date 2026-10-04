@@ -40,6 +40,7 @@
     printer: { label: 'Printer', icon: 'printer' },
     server: { label: 'Server Rack', icon: 'server' },
     arcade: { label: 'Arcade', icon: 'gamepad' },
+    lamp: { label: 'Lampu Lantai', icon: 'sun' },
   };
 
   VO.FACILITY_TYPES = {
@@ -47,6 +48,7 @@
     meeting: { label: 'Ruang Rapat', w: 12, h: 8, color: '#3d5a80' },
     pantry: { label: 'Pantry', w: 9, h: 8, color: '#6a994e' },
     lounge: { label: 'Lounge', w: 9, h: 8, color: '#9d4edd' },
+    pool: { label: 'Kolam Renang', w: 12, h: 9, color: '#1e88e5' },
   };
 
   VO.FLOORS = {
@@ -119,7 +121,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'classic', themeV3: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'luxe', themeV3: true, themeV4: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -132,7 +134,7 @@
       docs: [],
       log: [],
     };
-    for (const t of ['boss', 'meeting', 'pantry']) VO.addFacility(s, t);
+    for (const t of ['boss', 'meeting', 'pantry', 'pool']) VO.addFacility(s, t);
     return s;
   };
 
@@ -163,7 +165,10 @@
       }
     }
     // dekorasi
-    const deco = [['plant', 1, 1], ['plant', 36, 1], ['cooler', 37, 5], ['printer', 37, 7], ['bookshelf', 38, 2], ['sofa', 40, 2], ['arcade', 42, 2], ['plant', 44, 2]];
+    VO.autoLayout(s);
+    // dekorasi di sebelah kanan baris fasilitas (tidak menimpa ruangan)
+    const fx = Math.max(0, ...s.facilities.map((f) => f.x + f.w)) + 1;
+    const deco = [['plant', 1, 1], ['plant', fx, 1], ['cooler', fx + 1, 5], ['printer', fx + 1, 7], ['bookshelf', fx + 2, 2], ['sofa', fx + 4, 2], ['lamp', fx + 5, 4], ['arcade', fx + 6, 2], ['plant', fx + 8, 2]];
     for (const [type, x, y] of deco) s.furniture.push({ id: VO.uid('fu'), type, x, y });
     VO.autoLayout(s);
     VO.log(s, 'Kantor contoh dimuat: 3 divisi, 6 departemen.', 'building');
@@ -316,6 +321,16 @@
     return { desk: { x: cx, y: f.y + 3 }, chair: { x: cx, y: f.y + 2 }, room: f };
   };
 
+  // Kolam renang: air di tengah-kiri, kursi berjemur di sisi kanan (dek kayu di sekelilingnya)
+  VO.poolWater = function (f) {
+    return { x: f.x + 2, y: f.y + 2, w: Math.max(2, f.w - 6), h: Math.max(2, f.h - 4) };
+  };
+  VO.poolLoungers = function (f) {
+    const out = [];
+    for (let y = f.y + 2; y < f.y + f.h - 2; y += 2) out.push({ x: f.x + f.w - 2, y });
+    return out;
+  };
+
   VO.meetingTable = function (f) {
     return { x: f.x + 3, y: f.y + 3, w: Math.max(1, f.w - 6), h: Math.max(1, f.h - 6) };
   };
@@ -338,7 +353,7 @@
   VO.autoLayout = function (s) {
     // Fasilitas di baris atas
     let x = 2;
-    const order = ['boss', 'meeting', 'pantry', 'lounge'];
+    const order = ['boss', 'meeting', 'pantry', 'lounge', 'pool'];
     const facs = [...s.facilities].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
     for (const f of facs) {
       f.x = x; f.y = 2; x += f.w + 1;
@@ -398,6 +413,7 @@
     const d = VO.defaultState();
     const needV2 = !(s.settings && s.settings.modelsV2);
     const needV3 = !(s.settings && s.settings.themeV3);
+    const needV4 = !(s.settings && s.settings.themeV4);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -409,6 +425,8 @@
     for (const a of [s.boss, ...s.agents]) { if (!Array.isArray(a.memory)) a.memory = []; VO.ensureLook(a); }
     // v3: tampilan default berganti ke Kantor Klasik (tema lain tetap bisa dipilih)
     if (needV3) { s.settings.theme = 'classic'; s.settings.themeV3 = true; }
+    // v4: tampilan default berganti ke Penthouse (kantor mewah malam hari)
+    if (needV4) { s.settings.theme = 'luxe'; s.settings.themeV4 = true; }
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');

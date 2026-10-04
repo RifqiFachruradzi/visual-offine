@@ -99,6 +99,12 @@
     if (!s) { s = VO.defaultState(); app._saveDirty = true; }
     s.agents = s.agents.filter((a) => !a.live); // sesi live tidak bertahan setelah reload
     app.state = s;
+    // Penthouse: kantor lama mendapat kolam renang sekali (bisa dihapus/dipindah di Edit Layout)
+    if (!s.settings.poolV4) {
+      s.settings.poolV4 = true;
+      if (!s.facilities.some((f) => f.type === 'pool')) { const d = VO.FACILITY_TYPES.pool; VO.addFacility(s, 'pool', app.findFreeRect(d.w, d.h)); }
+      app._saveDirty = true;
+    }
     syncBoss();
     sim.sync(s);
 
@@ -115,6 +121,7 @@
     bindTop();
     bindCanvas(canvas);
     bindEditBar();
+    bindRoomTabs();
     VO.ui.bindTree();
     VO.ui.bindInspector();
     VO.ui.bindDocs();
@@ -146,6 +153,7 @@
     // panel UI di-refresh dengan ritme rendah agar ringan
     setInterval(() => {
       emptyStage();
+      renderRoomTabs();
       VO.ui.renderTree();
       VO.ui.renderInspector();
       if (app._dirty) {
@@ -179,6 +187,32 @@
     $('whoName').textContent = b.name;
   }
 
+  // Tab ruangan di atas kanvas (Lobby, Pantry, Kolam, divisi…) → kamera terbang ke ruangan itu
+  let tabsSig = '';
+  function renderRoomTabs() {
+    const s = app.state;
+    const items = [
+      ...s.facilities.map((f) => ({ kind: 'facility', id: f.id, name: f.name })),
+      ...s.divisions.map((d) => ({ kind: 'division', id: d.id, name: d.name })),
+    ];
+    const sig = items.map((i) => i.id + i.name).join('|');
+    if (sig === tabsSig) return;
+    tabsSig = sig;
+    $('roomTabs').innerHTML = `<button class="rt" data-all="1" title="Lihat seluruh kantor">${VO.icon('maximize')}</button>` +
+      items.map((i) => `<button class="rt" data-kind="${i.kind}" data-id="${i.id}">${VO.esc(i.name)}</button>`).join('');
+  }
+  function bindRoomTabs() {
+    $('roomTabs').addEventListener('click', (e) => {
+      const b = e.target.closest('button.rt');
+      if (!b) return;
+      const s = app.state;
+      if (b.dataset.all) return R.fit($('office'), s);
+      const r = b.dataset.kind === 'facility' ? s.facilities.find((f) => f.id === b.dataset.id) : s.divisions.find((d) => d.id === b.dataset.id)?.zone;
+      if (r) R.focusRect($('office'), s, r);
+      document.querySelectorAll('#roomTabs .rt').forEach((x) => x.classList.toggle('on', x === b));
+    });
+  }
+
   function emptyStage() {
     $('emptyStage').classList.toggle('hidden', app.state.divisions.length > 0 || app.ui.edit);
   }
@@ -195,12 +229,13 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
-  const THEMES = ['classic', 'robot', 'modern', 'pixel'];
-  const THEME_LABEL = { classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
-  const THEME_ICON = { classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
+  const THEMES = ['luxe', 'classic', 'robot', 'modern', 'pixel'];
+  const THEME_LABEL = { luxe: 'Penthouse (malam)', classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
+  const THEME_ICON = { luxe: 'star', classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
   function applyTheme() {
-    const t = app.state.settings.theme || 'classic';
-    document.body.classList.toggle('light', t !== 'pixel');
+    const t = app.state.settings.theme || 'luxe';
+    document.body.classList.toggle('light', t !== 'pixel' && t !== 'luxe');
+    document.body.classList.toggle('luxe', t === 'luxe');
     const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
     const b = $('btnTheme');
     b.innerHTML = VO.icon(THEME_ICON[t]);
@@ -250,7 +285,7 @@
     $('btnFit').onclick = () => R.fit($('office'), s());
     $('btnTheme').onclick = () => {
       const st = s().settings;
-      st.theme = THEMES[(THEMES.indexOf(st.theme || 'classic') + 1) % THEMES.length];
+      st.theme = THEMES[(THEMES.indexOf(st.theme || 'luxe') + 1) % THEMES.length];
       applyTheme();
       R.staticDirty = true;
       app.changed();
@@ -389,7 +424,7 @@
   }
 
   /* ------------------------------------------------------------ kanvas: kamera & editor */
-  const MIN = { boss: [7, 6], meeting: [8, 7], pantry: [6, 5], lounge: [6, 5] };
+  const MIN = { boss: [7, 6], meeting: [8, 7], pantry: [6, 5], lounge: [6, 5], pool: [9, 7] };
 
   function hitTest(s, wx, wy) {
     const tx = Math.floor(wx / T), ty = Math.floor(wy / T);

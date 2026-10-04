@@ -251,3 +251,28 @@ body.light .editbar, body.light .empty-stage .box { box-shadow: 0 10px 30px rgba
 .chat-foot { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
 .chat-foot textarea { flex: 1; resize: none; height: 40px; }
 .chat-note { font-size: 11px; color: var(--muted); padding: 0 12px 8px; }
+
+/* ---------------------------------------------------------------- tab ruangan (atas kanvas) */
+.roomtabs {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 20px);
+  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; padding: 4px;
+  background: var(--float); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.roomtabs::-webkit-scrollbar { display: none; }
+.roomtabs:empty { display: none; }
+.roomtabs .rt {
+  flex: none; border: 0; background: transparent; color: var(--soft); font: 600 12px Inter, system-ui, sans-serif;
+  padding: 6px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center;
+}
+.roomtabs .rt:hover { background: var(--hover-bg); color: var(--text); }
+.roomtabs .rt.on { background: var(--sel-bg); color: var(--accent); }
+.roomtabs .rt svg { width: 14px; height: 14px; }
+canvas#office.edit ~ .roomtabs { display: none; }
+
+/* ---------------------------------------------------------------- tema Penthouse (malam, aksen emas) */
+body.luxe {
+  --bg: #0b0f1c; --panel: #121829; --panel-2: #192036; --line: #263049; --text: #eef0f6; --muted: #98a0b8;
+  --accent: #e0b366; --primary: #d6a95b; --input: #0c1120; --hover: #3a4566; --hover-bg: #1d2540; --sel-bg: #252e4c;
+  --card: #10162a; --float: rgba(16,21,38,.93); --hint-bg: rgba(10,14,26,.8); --soft: #c4cadb; --dash: #2f3958;
+}
+body.luxe button.primary { color: #1a1408; }

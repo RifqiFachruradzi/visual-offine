@@ -18,7 +18,7 @@
   // Tema: 'modern' (terang, kantor terbuka — default) atau 'pixel' (gelap, gaya Habbo)
   // Tema: 'robot' (default — karakter robot, pulau kerja putih, aksen biru kobalt),
   // 'modern' (kantor terbuka terang, karakter manusia) atau 'pixel' (gelap, gaya Habbo)
-  const theme = () => (VO.app && VO.app.state && VO.app.state.settings.theme) || 'classic';
+  const theme = () => (VO.app && VO.app.state && VO.app.state.settings.theme) || 'luxe';
   const modern = () => theme() === 'robot' || theme() === 'modern'; // kantor terbuka terang
   const robot = () => theme() === 'robot';
   // 'classic' = kantor pixel isometrik klasik: lantai ubin lavender, dinding abu berjendela,
@@ -28,6 +28,17 @@
   const CL = { floorA: '#b9bde8', floorB: '#b3b7e3', wallL: '#eceef4', wallR: '#d7dae6', wallTop: '#bcc0d2', desk: '#efe6cf', chair: '#3d5fd6', chairBack: '#2f4fc4', glass: 'rgba(175,205,255,0.42)', frame: '#4a66cf' };
   R.isModern = modern;
   R.theme = theme;
+  // 'luxe' = Penthouse: lantai kayu hangat, dinding kaca dengan pemandangan kota malam,
+  // ruang rapat kaca + TV, kolam renang & dek, label nama pil gelap
+  const luxe = () => theme() === 'luxe';
+  R.isLuxe = luxe;
+  const LX = {
+    woodA: '#b48558', woodB: '#ad7f52', plank: 'rgba(70,35,10,0.2)', edgeL: '#3a2618', edgeR: '#28190f',
+    rug: '#26304a', rugEdge: '#3d4a6d', walnut: { top: '#6b4429', left: '#4f311d', right: '#3e2616' },
+    chair: '#1f2127', chairBack: '#17191e', gold: '#d6a95b', frame: '#23262e',
+  };
+  // angka acak deterministik dari koordinat (skyline, papan kayu, bintang)
+  const hash = (a, b = 0) => { const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return v - Math.floor(v); };
   const NAVY = '#2633c9', CORAL = '#f04e5e', ORANGE = '#f28a30';
   let props = [];
   const geo = { OX: 0, OY: 90, W: 0, H: 0 };
@@ -133,6 +144,8 @@
     poly(ctx, [A, B, { x: B.x, y: B.y + depth }, { x: A.x, y: A.y + depth }], shade(fl.a, M ? 0.88 : 0.55));
     poly(ctx, [B, C, { x: C.x, y: C.y + depth }, { x: B.x, y: B.y + depth }], shade(fl.a, M ? 0.8 : 0.42));
 
+    if (luxe()) return buildFloorLuxe(ctx, s);
+
     const tint = new Map(); // "x,y" → warna lantai ruangan
     const setRect = (r, color, inset = 0) => {
       for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
@@ -203,6 +216,70 @@
     }
   }
 
+  function buildFloorLuxe(ctx, s) {
+    const depth = 26;
+    const A = iso(0, s.map.h), B = iso(s.map.w, s.map.h), C = iso(s.map.w, 0);
+    poly(ctx, [A, B, { x: B.x, y: B.y + depth }, { x: A.x, y: A.y + depth }], LX.edgeL);
+    poly(ctx, [B, C, { x: C.x, y: C.y + depth }, { x: B.x, y: B.y + depth }], LX.edgeR);
+    // lampu LED hangat di tepi gedung
+    const led = (p) => {
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
+      g.addColorStop(0, 'rgba(255,214,140,0.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+      ctx.fillStyle = g; ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
+      ctx.fillStyle = '#ffe3a8'; ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, 7); ctx.fill();
+    };
+    for (let x = 0.5; x < s.map.w; x += 1.5) { const p = iso(x, s.map.h); led({ x: p.x, y: p.y + 9 }); }
+    for (let y = 0.5; y < s.map.h; y += 1.5) { const p = iso(s.map.w, y); led({ x: p.x, y: p.y + 9 }); }
+
+    const tint = new Map();
+    const setRect = (r, color, inset = 0) => {
+      for (let y = r.y + inset; y < r.y + r.h - inset; y++) for (let x = r.x + inset; x < r.x + r.w - inset; x++) tint.set(x + ',' + y, color);
+    };
+    for (const div of s.divisions) setRect(div.zone, mix(LX.woodA, div.color, 0.07));
+    const FAC = { boss: '#7d5032', meeting: '#c69660', pantry: 'marble', lounge: '#a9764a', pool: '#93633a' };
+    for (const f of s.facilities) setRect(f, FAC[f.type] || LX.woodA);
+    const marble = new Set();
+    for (let y = 0; y < s.map.h; y++)
+      for (let x = 0; x < s.map.w; x++) {
+        const c = tint.get(x + ',' + y);
+        if (c === 'marble') {
+          marble.add(x + ',' + y);
+          poly(ctx, diamond(x, y), (x + y) % 2 ? '#ece6dc' : '#ddd4c6', 'rgba(120,100,80,0.12)');
+          continue;
+        }
+        const base = c || LX.woodA;
+        poly(ctx, diamond(x, y), (x * 3 + y) % 4 === 0 ? shade(base, 0.96) : base);
+        // papan kayu searah sumbu x, sambungan berselang-seling
+        ctx.strokeStyle = LX.plank; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const v0 = y + k / 3, v1 = y + (k + 1) / 3;
+          const a = iso(x, v1), b = iso(x + 1, v1);
+          ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+          const u = x + hash(x + k * 0.37, y);
+          const j0 = iso(u, v0), j1 = iso(u, v1);
+          ctx.moveTo(j0.x, j0.y); ctx.lineTo(j1.x, j1.y);
+        }
+        ctx.stroke();
+      }
+    // karpet: biru tua di area kerja, merah anggur di ruang Boss, krem di lounge
+    const rug = (x, y, w, h, fill, edge) => {
+      if (w <= 0 || h <= 0) return;
+      poly(ctx, diamond(x, y, w, h), fill);
+      ctx.lineWidth = 2; poly(ctx, diamond(x + 0.12, y + 0.12, w - 0.24, h - 0.24), null, edge); ctx.lineWidth = 1;
+    };
+    for (const d of s.departments) rug(d.room.x + 0.7, d.room.y + 1.3, d.room.w - 1.4, d.room.h - 2, LX.rug, LX.rugEdge);
+    for (const div of s.divisions) rug(div.directorDesk.x - 1.2, div.directorDesk.y - 0.4, 3.4, 2.8, '#33283e', '#5b4870');
+    for (const f of s.facilities) {
+      if (f.type === 'boss') rug(f.x + 1.6, f.y + 1.6, f.w - 3.2, f.h - 3, '#5e2229', LX.gold);
+      if (f.type === 'lounge') rug(f.x + 1.5, f.y + 1.5, f.w - 3, f.h - 3, '#d8c6a4', '#b89f76');
+    }
+    // garis emas tipis batas zona divisi
+    ctx.lineWidth = 1.5;
+    for (const div of s.divisions) poly(ctx, diamond(div.zone.x + 0.1, div.zone.y + 0.1, div.zone.w - 0.2, div.zone.h - 0.2), null, alpha(LX.gold, 0.45));
+    ctx.lineWidth = 1;
+  }
+
   // Tulisan yang "dicat" di lantai, mengikuti sumbu x isometrik (size = px per 32 unit tile)
   function floorText(ctx, text, tx, ty, size, color) {
     const o = iso(tx, ty);
@@ -223,6 +300,7 @@
     const walls = (r, color, fac) => {
       if (robot()) return; // tema robot: pulau terbuka tanpa dinding
       if (modern()) return partitions(r, fac);
+      if (luxe()) return luxeWalls(r, fac);
       const doors = VO.doorTiles(r, fac);
       const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
       const CLS = classic();
@@ -278,6 +356,55 @@
       }
     };
 
+    // Penthouse: dinding belakang kaca (pemandangan kota malam) diselingi pilar kayu
+    // berlampu; dinding depan pagar kaca rendah; ruang rapat berdinding kaca penuh
+    const luxeWalls = (r, fac) => {
+      const doors = VO.doorTiles(r, fac);
+      const isDoor = (x, y) => doors.some((d) => d.x === x && d.y === y);
+      const type = fac && fac.type;
+      const open = type === 'pool'; // teras terbuka: pagar kaca di semua sisi
+      const TALL = 66, TH_ = 0.18;
+      const L = r.x, Tp = r.y, Rr = r.x + r.w - 1, B = r.y + r.h - 1;
+      const back = (x0, y0, x1, y1, kind, idx) => add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
+        if (open) return railing(ctx, x0, y0, x1, y1);
+        const win = idx % 3 !== 0;
+        const f = box(ctx, x0, y0, x1, y1, 0, TALL, win ? { top: '#2b2724', left: '#141b2c', right: '#101624' } : { top: '#2b2724', left: '#8b6a49', right: '#6d5136' }, { outline: false });
+        const face = kind === 'top' ? f.fL : f.fR;
+        if (win) skyline(ctx, face, kind === 'top' ? x0 : 1000 + y0);
+        else {
+          facePanel(ctx, face, 0.1, 0.9, 0.08, 0.92, kind === 'top' ? '#7d5e40' : '#634830'); // panel kayu
+          facePanel(ctx, face, 0.4, 0.6, 0.6, 0.7, LX.gold); // lampu dinding
+          const c = onFace(face, 0.5, 0.66);
+          const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 22);
+          g.addColorStop(0, 'rgba(255,205,130,0.55)'); g.addColorStop(1, 'rgba(255,205,130,0)');
+          ctx.fillStyle = g; ctx.fillRect(c.x - 22, c.y - 22, 44, 44);
+        }
+        // kusen gelap
+        facePanel(ctx, face, 0, 1, 0.94, 1, LX.frame);
+        facePanel(ctx, face, 0, 1, 0, 0.05, '#3a2c20');
+        facePanel(ctx, face, 0, 0.035, 0, 1, LX.frame);
+      });
+      const front = (x0, y0, x1, y1) => add((x0 + x1) / 2 + (y0 + y1) / 2, (ctx) => {
+        if (type === 'meeting') { // dinding kaca penuh ruang rapat
+          const g = box(ctx, x0, y0, x1, y1, 0, 50, { top: '#2b2f38', left: 'rgba(170,210,240,0.13)', right: 'rgba(150,190,230,0.11)' }, { outline: false });
+          ctx.strokeStyle = 'rgba(220,235,255,0.35)'; ctx.lineWidth = 1;
+          for (const f2 of [g.fL, g.fR]) { ctx.beginPath(); ctx.moveTo(f2[3].x, f2[3].y); ctx.lineTo(f2[2].x, f2[2].y); ctx.moveTo(f2[0].x, f2[0].y); ctx.lineTo(f2[3].x, f2[3].y); ctx.stroke(); }
+          return;
+        }
+        railing(ctx, x0, y0, x1, y1);
+      });
+      for (let x = L; x <= Rr; x++) {
+        if (isDoor(x, Tp)) continue;
+        back(x === L ? x + 1 - TH_ : x, Tp + 1 - TH_, x === Rr ? x + TH_ : x + 1, Tp + 1, 'top', x - L);
+      }
+      for (let y = Tp + 1; y <= B; y++) {
+        if (isDoor(L, y)) continue;
+        back(L + 1 - TH_, y, L + 1, y === B ? y + TH_ : y + 1, 'left', y - Tp);
+      }
+      for (let x = L + 1; x <= Rr; x++) if (!isDoor(x, B)) front(x, B, x === Rr ? x + TH_ : x + 1, B + TH_);
+      for (let y = Tp + 1; y < B; y++) if (!isDoor(Rr, y)) front(Rr, y, Rr + TH_, y + 1);
+    };
+
     // Modern: sekat rendah putih + tiang tipis di sudut (kantor terbuka)
     const partitions = (r, fac) => {
       const doors = VO.doorTiles(r, fac);
@@ -310,6 +437,10 @@
       const div = s.divisions.find((x) => x.id === d.divisionId);
       walls(d.room, div ? div.color : '#888888', null);
       const members = VO.deptAgents(s, d.id);
+      if (luxe() && d.room.w >= 6) {
+        const cx = d.room.x + Math.floor(d.room.w / 2) - 1.2;
+        add(cx + 2.5 + d.room.y + 1.0, (ctx, now) => wallChart(ctx, cx, d.room.y + 0.98, 2.4, members.some((m) => VO.sim.rt.get(m.id)?.working), now, div ? div.color : '#7fb2ff'));
+      }
       VO.deskSlots(d.room).forEach((sl, i) => {
         add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#ffffff' : '#a47148'));
         add(sl.chair.x + sl.chair.y + 0.9, (ctx) => drawChair(ctx, sl.chair.x, sl.chair.y));
@@ -324,6 +455,38 @@
     }
     for (const fu of s.furniture) add(fu.x + fu.y + 1, (ctx) => drawFurniture(ctx, fu));
     props.sort((a, b) => a.k - b.k);
+  }
+
+  // Pemandangan kota malam di permukaan dinding kaca (seed = posisi agar menyambung)
+  function skyline(ctx, face, seed) {
+    const sky = (u0, u1, v0, v1, c) => facePanel(ctx, face, u0, u1, v0, v1, c);
+    sky(0, 1, 0, 1, '#1b2a4a');
+    sky(0, 1, 0.55, 1, '#22355c');
+    sky(0, 1, 0.8, 1, '#2c4470');
+    for (let i = 0; i < 3; i++) {
+      const u0 = i / 3 + hash(seed, i) * 0.08, u1 = u0 + 0.22 + hash(seed, i + 9) * 0.1;
+      const top = 0.25 + hash(seed, i + 3) * 0.55;
+      const far = i % 2 === 0;
+      sky(u0, Math.min(1, u1), 0, top, far ? '#121b30' : '#0c1324');
+      // jendela gedung yang menyala
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 3; c++) {
+        const v = 0.06 + r * 0.1;
+        if (v + 0.05 > top) break;
+        if (hash(seed * 3 + i, r * 5 + c) < 0.45) continue;
+        const uu = u0 + 0.03 + c * ((Math.min(1, u1) - u0 - 0.06) / 3);
+        sky(uu, uu + 0.04, v, v + 0.04, hash(seed + r, c) > 0.8 ? '#9fd3ff' : '#ffd88a');
+      }
+    }
+    // pantulan kaca
+    ctx.save(); ctx.globalAlpha = 0.12; sky(0.55, 0.7, 0.1, 1, '#ffffff'); ctx.restore();
+  }
+
+  // Pagar kaca rendah dengan pegangan gelap
+  function railing(ctx, x0, y0, x1, y1) {
+    const g = box(ctx, x0, y0, x1, y1, 0, 17, { top: '#3a3f4a', left: 'rgba(180,215,240,0.2)', right: 'rgba(160,200,230,0.17)' }, { outline: false });
+    ctx.strokeStyle = '#2a2e36'; ctx.lineWidth = 2;
+    for (const f2 of [g.fL, g.fR]) { ctx.beginPath(); ctx.moveTo(f2[3].x, f2[3].y); ctx.lineTo(f2[2].x, f2[2].y); ctx.stroke(); }
+    ctx.lineWidth = 1;
   }
 
   function facilityProps(s, f, add) {
@@ -356,12 +519,13 @@
         for (let x = t.x; x < t.x + t.w; x++)
           add(x + y + 1, (ctx) => {
             box(ctx, x - (x === t.x ? -0.1 : 0), y - (y === t.y ? -0.1 : 0), x + 1 - (x === t.x + t.w - 1 ? 0.1 : 0), y + 1 - (y === t.y + t.h - 1 ? 0.1 : 0), 0, 14,
-              robot() ? { top: '#ffffff', left: '#dfe2f0', right: '#c9cee3' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
+              robot() ? { top: '#ffffff', left: '#dfe2f0', right: '#c9cee3' } : classic() ? { top: CL.desk, left: '#ddd2b6', right: '#cbbf9f' } : luxe() ? LX.walnut : { top: '#8a6648', left: '#6b4f3a', right: '#56402f' }, { outline: false });
           });
       for (const p of VO.sim.spots(s, 'meeting'))
-        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, robot() ? NAVY : classic() ? CL.chair : '#3a3f4b'));
+        add(p.x + p.y + 0.9, (ctx) => box(ctx, p.x + 0.28, p.y + 0.28, p.x + 0.72, p.y + 0.72, 0, 7, robot() ? NAVY : classic() ? CL.chair : luxe() ? LX.chair : '#3a3f4b'));
       // layar presentasi di dinding belakang
-      add(f.x + f.w / 2 + f.y + 1.2, (ctx) => {
+      add(f.x + f.w / 2 + f.y + (luxe() ? 3.6 : 1.2), (ctx, now, st) => {
+        if (luxe()) return wallTV(ctx, f.x + f.w / 2 - 2, f.y + 0.98, 4, st, now);
         const b = box(ctx, f.x + f.w / 2 - 1.5, f.y + 0.95, f.x + f.w / 2 + 1.5, f.y + 1.02, 18, 22, '#22252c');
         facePanel(ctx, b.fL, 0.06, 0.94, 0.12, 0.88, '#4fc3f7');
       });
@@ -369,7 +533,7 @@
       for (let x = f.x + 1; x < f.x + f.w - 1; x++) {
         const y = f.y + 1;
         add(x + y + 1, (ctx) => {
-          box(ctx, x, y + 0.1, x + 1, y + 0.9, 0, 18, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : { top: '#d5d9df', left: '#9aa1ad', right: '#858c98' });
+          box(ctx, x, y + 0.1, x + 1, y + 0.9, 0, 18, robot() ? { top: '#ffffff', left: NAVY, right: '#1f2aa8' } : luxe() ? { top: '#efe9e0', left: '#5a3a24', right: '#462c1a' } : { top: '#d5d9df', left: '#9aa1ad', right: '#858c98' });
           if (x === f.x + 1) { // mesin kopi
             const b = box(ctx, x + 0.25, y + 0.25, x + 0.75, y + 0.65, 18, 16, '#2a2a2e');
             facePanel(ctx, b.fL, 0.3, 0.7, 0.55, 0.75, '#e53935');
@@ -380,16 +544,115 @@
       }
       for (let i = 0; i < Math.floor((f.w - 2) / 3); i++) {
         const x = f.x + 2 + i * 3, y = f.y + f.h - 3;
-        add(x + y + 1, (ctx) => box(ctx, x + 0.2, y + 0.2, x + 0.8, y + 0.8, 0, 13, { top: '#efebe9', left: '#bcaaa4', right: '#a1887f' }));
+        add(x + y + 1, (ctx) => {
+          if (luxe()) { // meja bar bundar + bangku
+            box(ctx, x + 0.45, y + 0.45, x + 0.55, y + 0.55, 0, 14, '#2a2b30', { outline: false });
+            const p = iso(x + 0.5, y + 0.5, 14);
+            ctx.fillStyle = '#5a3a24'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 1.5, 15, 7.5, 0, 0, 7); ctx.fill();
+            ctx.fillStyle = '#6f4a2e'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 15, 7.5, 0, 0, 7); ctx.fill();
+            return;
+          }
+          box(ctx, x + 0.2, y + 0.2, x + 0.8, y + 0.8, 0, 13, { top: '#efebe9', left: '#bcaaa4', right: '#a1887f' });
+        });
       }
     } else if (f.type === 'lounge') {
       add(f.x + 2 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'sofa', x: f.x + 2, y: f.y + 1 }));
       add(f.x + 4 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'sofa', x: f.x + 4, y: f.y + 1 }));
       add(f.x + f.w - 1.5 + f.y + 1.5, (ctx) => drawFurniture(ctx, { type: 'arcade', x: f.x + f.w - 2, y: f.y + 1 }));
+      if (luxe()) add(f.x + 3.5 + f.y + 3, (ctx) => {
+        const b = box(ctx, f.x + 2.6, f.y + 2.6, f.x + 4.4, f.y + 3.4, 0, 8, LX.walnut);
+        poly(ctx, diamond(f.x + 3.2, f.y + 2.8, 0.4, 0.3, 8), '#f5f5f5');
+        return b;
+      });
+    } else if (f.type === 'pool') {
+      const w = VO.poolWater(f);
+      VO.poolLoungers(f).forEach((l, i) => {
+        add(l.x + l.y + 1, (ctx) => drawLounger(ctx, l.x, l.y));
+        if (i % 2 === 0) add(l.x + l.y + 1.6, (ctx) => drawUmbrella(ctx, l.x - 0.15, l.y + 1));
+      });
+      // lampu taman di sudut kolam
+      for (const [lx, ly] of [[w.x - 0.6, w.y - 0.6], [w.x + w.w + 0.3, w.y - 0.6], [w.x - 0.6, w.y + w.h + 0.3], [w.x + w.w + 0.3, w.y + w.h + 0.3]])
+        add(lx + ly + 0.6, (ctx) => drawGardenLamp(ctx, lx, ly));
     }
   }
 
+  function drawLounger(ctx, x, y) {
+    box(ctx, x + 0.1, y + 0.2, x + 0.9, y + 0.8, 0, 6, { top: '#8d5a33', left: '#6e4426', right: '#5a371f' }, { outline: false });
+    box(ctx, x + 0.14, y + 0.24, x + 0.86, y + 0.76, 6, 3, { top: '#f6f2ea', left: '#e2dccf', right: '#d3ccbe' }, { outline: false });
+    box(ctx, x + 0.14, y + 0.24, x + 0.34, y + 0.76, 9, 9, { top: '#f6f2ea', left: '#e8e2d6', right: '#d9d2c4' }, { outline: false }); // sandaran
+  }
+
+  function drawUmbrella(ctx, x, y) {
+    const b = iso(x, y), top = { x: b.x, y: b.y - 46 };
+    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(top.x, top.y); ctx.stroke(); ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2;
+      ctx.fillStyle = i % 2 ? '#efe6d2' : '#d9cba8';
+      ctx.beginPath(); ctx.moveTo(top.x, top.y - 6);
+      ctx.lineTo(top.x + Math.cos(a0) * 26, top.y + Math.sin(a0) * 13 + 4);
+      ctx.lineTo(top.x + Math.cos(a1) * 26, top.y + Math.sin(a1) * 13 + 4);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawGardenLamp(ctx, x, y) {
+    box(ctx, x - 0.08, y - 0.08, x + 0.08, y + 0.08, 0, 16, '#2a2b30', { outline: false });
+    const p = iso(x, y, 18);
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 20);
+    g.addColorStop(0, 'rgba(255,214,140,0.6)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = g; ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
+    ctx.fillStyle = '#ffe2a6'; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, 7); ctx.fill();
+  }
+
+  // Teks di permukaan vertikal yang menghadap +ty (mengikuti sumbu x isometrik)
+  function faceText(ctx, face, u, v, text, font, color, maxW) {
+    const o = onFace(face, u, v);
+    ctx.save();
+    ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([HW / 32, HH / 32, 0, 1, o.x, o.y])));
+    ctx.font = font; ctx.fillStyle = color;
+    let s2 = String(text);
+    while (maxW && s2.length > 3 && ctx.measureText(s2).width > maxW) s2 = s2.slice(0, -2);
+    if (s2 !== String(text)) s2 = s2.trimEnd() + '…';
+    ctx.fillText(s2, 0, 0);
+    ctx.restore();
+  }
+
+  // TV besar di dinding: menampilkan tugas yang sedang berjalan (seperti papan status)
+  function wallTV(ctx, x, y, w, s, now) {
+    const b = box(ctx, x, y, x + w, y + 0.06, 14, 42, '#0d0f14', { outline: false });
+    facePanel(ctx, b.fL, 0.03, 0.97, 0.06, 0.94, '#121a30');
+    const active = s.tasks.find((t) => !['done', 'failed'].includes(t.status));
+    const glow = 0.85 + Math.sin(now / 600) * 0.15;
+    ctx.save(); ctx.globalAlpha = glow;
+    const px = w * 32; // lebar teks dalam satuan lokal
+    if (active) {
+      faceText(ctx, b.fL, 0.07, 0.66, active.status === 'meeting' ? 'RAPAT' : 'SEDANG DIKERJAKAN', 'bold 7.5px Inter, system-ui, sans-serif', '#ff8a65', px * 0.8);
+      faceText(ctx, b.fL, 0.07, 0.24, active.title, 'bold 12px Inter, system-ui, sans-serif', '#ffd27a', px * 0.84);
+    } else {
+      faceText(ctx, b.fL, 0.07, 0.66, 'STATUS KANTOR', 'bold 7.5px Inter, system-ui, sans-serif', '#7fb2ff', px * 0.8);
+      faceText(ctx, b.fL, 0.07, 0.24, (s.company && s.company.name) || 'Kantor AI', 'bold 12px Inter, system-ui, sans-serif', '#ffd27a', px * 0.84);
+    }
+    ctx.restore();
+  }
+
+  // Layar dinding departemen: grafik batang (bergerak saat tim bekerja)
+  function wallChart(ctx, x, y, w, busy, now, color) {
+    const b = box(ctx, x, y, x + w, y + 0.06, 18, 28, '#0d0f14', { outline: false });
+    facePanel(ctx, b.fL, 0.04, 0.96, 0.08, 0.92, '#111830');
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const h = 0.18 + hash(x + i, y) * 0.5 + (busy ? Math.sin(now / 400 + i) * 0.08 : 0);
+      const u0 = 0.1 + i * (0.8 / n);
+      facePanel(ctx, b.fL, u0, u0 + 0.07, 0.16, 0.16 + Math.max(0.05, h), i % 2 ? color : '#ff6fb1');
+    }
+    ctx.strokeStyle = '#7fe0ff'; ctx.lineWidth = 1.2; ctx.beginPath();
+    for (let i = 0; i <= 8; i++) { const p = onFace(b.fL, 0.1 + i * 0.1, 0.5 + hash(i, x) * 0.3 + (busy ? Math.sin(now / 500 + i) * 0.04 : 0)); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+
   function drawDesk(ctx, x, y, now, ent, topColor) {
+    if (luxe()) return drawDeskLuxe(ctx, x, y, now, ent);
     if (modern()) { // meja putih dengan kaki ramping
       box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 12, 3, { top: topColor, left: '#dde1e8', right: '#cdd2db' }, { outline: false });
       for (const [lx, ly] of [[0.1, 0.18], [0.86, 0.18], [0.1, 0.78], [0.86, 0.78]]) box(ctx, x + lx, y + ly, x + lx + 0.04, y + ly + 0.04, 0, 12, '#b8bfcb', { outline: false });
@@ -426,13 +689,41 @@
     box(ctx, x + 0.8, y + 0.2, x + 0.88, y + 0.28, 15, 5, '#ffffff', { outline: false });
   }
 
+  // Meja kayu walnut dengan dua monitor (layar grafik menyala saat bekerja)
+  function drawDeskLuxe(ctx, x, y, now, ent) {
+    const d = box(ctx, x + 0.04, y + 0.14, x + 0.96, y + 0.86, 0, 15, LX.walnut);
+    facePanel(ctx, d.fL, 0.04, 0.96, 0.82, 0.9, '#7a5233');
+    const rt = ent && VO.sim.rt.get(ent.id);
+    const working = rt && rt.working;
+    for (const [u0, u1] of [[0.1, 0.48], [0.52, 0.9]]) {
+      box(ctx, x + (u0 + u1) / 2 - 0.03, y + 0.32, x + (u0 + u1) / 2 + 0.03, y + 0.38, 15, 5, '#1a1c22', { outline: false });
+      const m = box(ctx, x + u0, y + 0.3, x + u1, y + 0.36, 19, 14, '#14161b', { outline: false });
+      facePanel(ctx, m.fL, 0.07, 0.93, 0.1, 0.9, !ent ? '#16181e' : working ? '#0f2547' : '#1c2740');
+      if (working) {
+        const hue = u0 < 0.5 ? ['#5ec8ff', '#7cf29a', '#ffd166'] : ['#ff7ab6', '#9d8bff', '#5ec8ff'];
+        for (let i = 0; i < 4; i++) {
+          const h = 0.2 + ((Math.sin(now / 260 + i * 1.7 + x * 2 + u0 * 5) + 1) / 2) * 0.55;
+          facePanel(ctx, m.fL, 0.15 + i * 0.19, 0.27 + i * 0.19, 0.18, 0.18 + h * 0.7, hue[i % 3]);
+        }
+      }
+    }
+    if (working) {
+      const c = onFace(d.fL, 0.5, 2.2);
+      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 26);
+      g.addColorStop(0, 'rgba(94,200,255,0.18)'); g.addColorStop(1, 'rgba(94,200,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(c.x - 26, c.y - 26, 52, 52);
+    }
+    poly(ctx, diamond(x + 0.3, y + 0.55, 0.4, 0.14, 15), '#2a2d34');
+    box(ctx, x + 0.82, y + 0.22, x + 0.9, y + 0.3, 15, 5, '#f4efe6', { outline: false });
+  }
+
   function drawChair(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, classic() ? CL.chair : robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
+    box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, luxe() ? LX.chair : classic() ? CL.chair : robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
     box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false }); // tiang
   }
   // sandaran digambar SETELAH karyawan yang duduk, agar menutupi punggungnya
   function drawChairBack(ctx, x, y) {
-    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, classic() ? CL.chairBack : robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
+    box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, luxe() ? LX.chairBack : classic() ? CL.chairBack : robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
   }
 
   function drawFurniture(ctx, f) {
@@ -450,6 +741,21 @@
           g.addColorStop(0, '#5d6bff'); g.addColorStop(1, NAVY);
           ctx.fillStyle = g;
           ctx.beginPath(); ctx.ellipse(q.x, q.y - 22, 11, 15, 0, 0, 7); ctx.fill();
+          break;
+        }
+        if (luxe()) { // tanaman tropis dalam pot hitam tinggi
+          box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 16, { top: '#3a3b40', left: '#2a2b30', right: '#1f2024' }, { outline: false });
+          const q = iso(x + 0.5, y + 0.5, 16);
+          ctx.fillStyle = '#3b2a1c'; ctx.beginPath(); ctx.ellipse(q.x, q.y, 8, 4, 0, 0, 7); ctx.fill();
+          for (let i = 0; i < 9; i++) {
+            const a = -Math.PI / 2 + (i - 4) * 0.36;
+            const len = 18 + hash(x + i, y) * 8;
+            ctx.save(); ctx.translate(q.x, q.y - 2); ctx.rotate(a + Math.PI / 2);
+            ctx.fillStyle = i % 2 ? '#2f7a3a' : '#3f9a4a';
+            ctx.beginPath(); ctx.ellipse(0, -len / 2, 4.2, len / 2, 0, 0, 7); ctx.fill();
+            ctx.strokeStyle = 'rgba(20,60,25,0.6)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -len); ctx.stroke();
+            ctx.restore();
+          }
           break;
         }
         if (classic()) { // pohon bonsai bulat dalam pot terakota
@@ -470,6 +776,13 @@
         break;
       }
       case 'sofa':
+        if (luxe()) { // sofa kulit krem
+          box(ctx, x + 0.05, y + 0.2, x + 0.95, y + 0.85, 0, 10, { top: '#eadfca', left: '#d6c8ad', right: '#c3b498' });
+          box(ctx, x + 0.05, y + 0.12, x + 0.95, y + 0.32, 0, 22, { top: '#e2d5bb', left: '#cdbd9f', right: '#b9a989' });
+          box(ctx, x + 0.05, y + 0.2, x + 0.17, y + 0.85, 0, 15, { top: '#e2d5bb', left: '#cdbd9f', right: '#b9a989' });
+          box(ctx, x + 0.83, y + 0.2, x + 0.95, y + 0.85, 0, 15, { top: '#e2d5bb', left: '#cdbd9f', right: '#b9a989' });
+          break;
+        }
         if (classic()) {
           box(ctx, x + 0.05, y + 0.2, x + 0.95, y + 0.85, 0, 10, '#3d63d8');
           box(ctx, x + 0.05, y + 0.12, x + 0.95, y + 0.32, 0, 22, '#2f50c2');
@@ -483,7 +796,7 @@
         box(ctx, x + 0.83, y + 0.2, x + 0.95, y + 0.85, 0, 16, '#4a59ad');
         break;
       case 'bookshelf': {
-        const b = box(ctx, x + 0.08, y + 0.3, x + 0.92, y + 0.7, 0, 46, classic() ? { top: '#4a66cf', left: '#cfe0ff', right: '#9fb6ee' } : '#6d4c41');
+        const b = box(ctx, x + 0.08, y + 0.3, x + 0.92, y + 0.7, 0, 46, classic() ? { top: '#4a66cf', left: '#cfe0ff', right: '#9fb6ee' } : luxe() ? LX.walnut : '#6d4c41');
         for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++)
           facePanel(ctx, b.fL, 0.08 + i * 0.145, 0.08 + i * 0.145 + 0.11, 0.08 + r * 0.23, 0.08 + r * 0.23 + 0.17, VO.SHIRTS[(r * 6 + i) % VO.SHIRTS.length]);
         break;
@@ -519,6 +832,17 @@
       case 'server': {
         const b = box(ctx, x + 0.15, y + 0.2, x + 0.85, y + 0.8, 0, 46, '#263238');
         for (let i = 0; i < 6; i++) facePanel(ctx, b.fL, 0.15, 0.3, 0.1 + i * 0.14, 0.15 + i * 0.14, i % 2 ? '#66bb6a' : '#29b6f6');
+        break;
+      }
+      case 'lamp': { // lampu lantai dengan cahaya hangat
+        box(ctx, x + 0.38, y + 0.38, x + 0.62, y + 0.62, 0, 3, '#2a2b30', { outline: false });
+        const b0 = iso(x + 0.5, y + 0.5, 3);
+        ctx.strokeStyle = '#3a3b40'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b0.x, b0.y); ctx.lineTo(b0.x, b0.y - 40); ctx.stroke(); ctx.lineWidth = 1;
+        const p = { x: b0.x, y: b0.y - 44 };
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 34);
+        g.addColorStop(0, 'rgba(255,210,140,0.5)'); g.addColorStop(1, 'rgba(255,210,140,0)');
+        ctx.fillStyle = g; ctx.fillRect(p.x - 34, p.y - 34, 68, 68);
+        ctx.fillStyle = '#f3e3c3'; ctx.beginPath(); ctx.moveTo(p.x - 6, p.y - 6); ctx.lineTo(p.x + 6, p.y - 6); ctx.lineTo(p.x + 9, p.y + 5); ctx.lineTo(p.x - 9, p.y + 5); ctx.closePath(); ctx.fill();
         break;
       }
       case 'arcade': {
@@ -870,7 +1194,8 @@
     }
     ctx.save();
     ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
-    ctx.scale(1.15, 1.15);
+    const SC = luxe() ? 1.25 : 1.15;
+    ctx.scale(SC, SC);
     const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
     const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;
     const talking = !!(rt.bubble && rt.bubble.until > now && now - (rt.bubble.until - 3000) < 1600);
@@ -882,12 +1207,13 @@
       poly(ctx, [{ x: -7, y }, { x: -7, y: y - 7 }, { x: -3.5, y: y - 3 }, { x: 0, y: y - 9 }, { x: 3.5, y: y - 3 }, { x: 7, y: y - 7 }, { x: 7, y }], '#ffca28', '#b8860b');
     }
     ctx.restore();
-    rt._screen = { x: p.x, y: p.y, head: p.y + headTop * 1.15 };
+    rt._screen = { x: p.x, y: p.y, head: p.y + headTop * SC };
   }
 
   /* ------------------------------------------------------------ overlay: label, nama, balon */
   function drawLabels(ctx, s) {
     if (modern()) return; // nama tim sudah dicat di lantai
+    if (luxe()) return drawLabelsLuxe(ctx, s);
     ctx.font = 'bold 13px Inter, system-ui, sans-serif';
     for (const div of s.divisions) {
       const p = iso(div.zone.x + 0.5, div.zone.y + 0.5);
@@ -912,9 +1238,89 @@
     }
   }
 
+  // Papan nama gelap mengambang di atas dinding belakang ruangan
+  function drawLabelsLuxe(ctx, s) {
+    const plate = (r, text, color, icon, z = 74) => {
+      const p = iso(r.x + 1.3, r.y + 1, z);
+      ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + 30;
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+      ctx.fillStyle = 'rgba(18,20,28,0.9)'; rr(ctx, p.x - 6, p.y - 10, tw, 20, 10); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = alpha(LX.gold, 0.55); rr(ctx, p.x - 6, p.y - 10, tw, 20, 10); ctx.stroke();
+      VO.drawIcon(ctx, icon, p.x + 6, p.y, 10, color);
+      ctx.fillStyle = '#f4efe6'; ctx.fillText(text, p.x + 16, p.y + 4);
+    };
+    for (const div of s.divisions) plate({ x: div.zone.x, y: div.zone.y - 0.4 }, div.name, div.color, 'layers', 30);
+    const FI = { boss: 'crown', meeting: 'meeting', pantry: 'coffee', lounge: 'sofa', pool: 'droplet' };
+    for (const f of s.facilities) plate(f, f.name, LX.gold, FI[f.type] || 'door', f.type === 'pool' ? 24 : 74);
+    for (const d of s.departments) {
+      const div = s.divisions.find((x) => x.id === d.divisionId);
+      plate(d.room, d.name, div ? div.color : LX.gold, VO.integ && VO.integ.forDept(s, d)?.icon || 'building');
+    }
+  }
+
+  // Gaya Penthouse: label pil gelap di bawah kaki, balon putih di atas kepala, lencana "!" merah
+  function drawOverlayLuxe(ctx, ent, rt, now, sc) {
+    const sel = R.selected === ent.id, hov = R.hover === ent.id;
+    const busy = rt.working || ['briefing', 'reporting', 'meeting'].includes(rt.status);
+    if (R.cam.zoom >= 0.45 || sel || hov) {
+      const name = ent.name;
+      const role = ent.id === 'boss' ? 'Boss' : (ent.role || '').split(' ').slice(0, 2).join(' ');
+      const showRole = R.cam.zoom >= 0.9 || sel || hov;
+      ctx.font = 'bold 9.5px Inter, system-ui, sans-serif';
+      const w1 = ctx.measureText(name).width;
+      ctx.font = '8.5px Inter, system-ui, sans-serif';
+      const w2 = showRole && role ? ctx.measureText(role).width + 5 : 0;
+      const pw = w1 + w2 + 22, ph = 15;
+      const px = sc.x - pw / 2, py = sc.y + 7;
+      ctx.fillStyle = sel ? 'rgba(48,40,22,0.95)' : 'rgba(16,18,24,0.86)'; rr(ctx, px, py, pw, ph, 7.5); ctx.fill();
+      if (sel) { ctx.strokeStyle = LX.gold; ctx.lineWidth = 1.2; rr(ctx, px, py, pw, ph, 7.5); ctx.stroke(); ctx.lineWidth = 1; }
+      ctx.fillStyle = busy ? '#ffb347' : rt.status === 'walking' ? '#9aa3b8' : '#4cd38a';
+      ctx.beginPath(); ctx.arc(px + 8, py + ph / 2, 2.8, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9.5px Inter, system-ui, sans-serif'; ctx.fillText(name, px + 14, py + 10.8);
+      if (w2) { ctx.fillStyle = '#a9b0c2'; ctx.font = '8.5px Inter, system-ui, sans-serif'; ctx.fillText(role, px + 19 + w1, py + 10.8); }
+      if (rt.working && rt.progress > 0 && rt.progress < 1 && !ent.live) {
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(px + 8, py + ph + 2, pw - 16, 2.5);
+        ctx.fillStyle = '#ffb347'; ctx.fillRect(px + 8, py + ph + 2, (pw - 16) * rt.progress, 2.5);
+      }
+    }
+    // lencana merah "!" saat menunggu Boss (melapor / briefing) atau tugas gagal
+    let by = sc.head - 28;
+    if (rt.status === 'reporting' || rt.status === 'briefing' || rt.alert) {
+      const bx = sc.x + 11, byy = sc.head - 6 + Math.sin(now / 250) * 1.5;
+      ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(bx, byy, 6, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Inter, system-ui, sans-serif'; ctx.fillText('!', bx - 1.5, byy + 3.3);
+    }
+    if (!(rt.bubble && rt.bubble.until > now) && rt.working && rt.activity && (R.cam.zoom >= 0.7 || sel || hov)) {
+      drawPill(ctx, sc.x, by, rt.activity, 'monitor', 1);
+      return;
+    }
+    if (rt.bubble && rt.bubble.until > now) drawPill(ctx, sc.x, by, rt.bubble.text, rt.bubble.icon || VO.sim.STATUS_ICON[rt.status], Math.min(1, (rt.bubble.until - now) / 300));
+  }
+
+  // Balon pil putih dengan ikon (gaya "Tayang Kam 18.00")
+  function drawPill(ctx, cx, y, text, icon, a) {
+    ctx.font = '10.5px Inter, system-ui, sans-serif';
+    let s2 = String(text);
+    while (s2.length > 4 && ctx.measureText(s2).width > 190) s2 = s2.slice(0, -2);
+    if (s2 !== String(text)) s2 = s2.trimEnd() + '…';
+    const iw = icon ? 15 : 0;
+    const w = ctx.measureText(s2).width + iw + 16, h = 19;
+    const x = cx - w / 2;
+    ctx.globalAlpha = a;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#ffffff'; rr(ctx, x, y, w, h, 9.5); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = 'rgba(30,40,70,0.18)'; rr(ctx, x, y, w, h, 9.5); ctx.stroke();
+    if (icon) VO.drawIcon(ctx, icon, x + 12, y + h / 2, 10, '#5b6cff');
+    ctx.fillStyle = '#1d2230'; ctx.fillText(s2, x + 8 + iw, y + 13.3);
+    ctx.globalAlpha = 1;
+  }
+
   function drawPersonOverlay(ctx, ent, rt, now) {
     const sc = rt._screen;
     if (!sc) return;
+    if (luxe()) return drawOverlayLuxe(ctx, ent, rt, now, sc);
     const icon = rt.liveTool && rt.liveTool !== 'thinking' ? 'tool' : rt.liveTool === 'thinking' ? 'brain' : VO.sim.STATUS_ICON[rt.status];
     const sel0 = R.selected === ent.id, hov0 = R.hover === ent.id;
     let bubbleY = sc.head - 30;
@@ -1040,6 +1446,55 @@
     }
   }
 
+  // Air kolam beranimasi: tepi batu, dinding dalam, kilau kaustik bergerak
+  function drawWater(ctx, w, now) {
+    poly(ctx, diamond(w.x - 0.18, w.y - 0.18, w.w + 0.36, w.h + 0.36), '#ebe6dc', 'rgba(0,0,0,0.12)');
+    const pts = diamond(w.x, w.y, w.w, w.h);
+    const g = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+    g.addColorStop(0, '#4fc6ef'); g.addColorStop(1, '#1d93d6');
+    poly(ctx, pts, g);
+    // dinding dalam kolam (sisi belakang terlihat)
+    const D = 9;
+    poly(ctx, [pts[0], pts[1], { x: pts[1].x, y: pts[1].y + D }, { x: pts[0].x + (pts[1].x - pts[0].x) * 0.03, y: pts[0].y + D }], 'rgba(150,225,250,0.75)');
+    poly(ctx, [pts[0], pts[3], { x: pts[3].x, y: pts[3].y + D }, { x: pts[0].x, y: pts[0].y + D }], 'rgba(120,205,240,0.75)');
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.clip();
+    // ubin dasar kolam
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.beginPath();
+    for (let x = w.x; x <= w.x + w.w; x += 0.5) { const a = iso(x, w.y), b = iso(x, w.y + w.h); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+    for (let y = w.y; y <= w.y + w.h; y += 0.5) { const a = iso(w.x, y), b = iso(w.x + w.w, y); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+    ctx.stroke();
+    // kaustik
+    const tt = now / 1000;
+    ctx.strokeStyle = 'rgba(255,255,255,0.38)'; ctx.lineWidth = 1.2;
+    for (let j = 0; j < w.h * 3; j++) {
+      ctx.beginPath();
+      for (let i = 0; i <= w.w * 6; i++) {
+        const fx = w.x + i / 6, fy = w.y + (j + 0.5) / 3 + Math.sin(tt * 1.3 + i * 0.9 + j * 1.7) * 0.07;
+        const p = iso(fx, fy);
+        i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    for (let i = 0; i < w.w * 3; i++) {
+      ctx.beginPath();
+      for (let j = 0; j <= w.h * 6; j++) {
+        const fy = w.y + j / 6, fx = w.x + (i + 0.5) / 3 + Math.sin(tt * 1.1 + j * 0.8 + i * 2.1) * 0.07;
+        const p = iso(fx, fy);
+        j ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.lineWidth = 1;
+    // tangga besi
+    const lx = w.x + w.w - 0.6, ly = w.y;
+    ctx.strokeStyle = '#d7dde3'; ctx.lineWidth = 2;
+    for (const o of [0, 0.3]) { const a = iso(lx + o, ly, 0), b = iso(lx + o, ly - 0.25, 14); ctx.beginPath(); ctx.moveTo(a.x, a.y + 6); ctx.lineTo(a.x, a.y - 8); ctx.quadraticCurveTo(b.x, b.y - 4, b.x, b.y + 4); ctx.stroke(); }
+    ctx.lineWidth = 1;
+  }
+
   /* ------------------------------------------------------------ frame */
   R.draw = function (canvas, s, ui) {
     const ctx = canvas.getContext('2d');
@@ -1056,11 +1511,21 @@
     if (robot()) { g.addColorStop(0, '#f3f4fa'); g.addColorStop(1, '#e3e6f2'); }
     else if (modern()) { g.addColorStop(0, '#f6f8fb'); g.addColorStop(1, '#e4e9f1'); }
     else if (classic()) { g.addColorStop(0, '#f4f4fb'); g.addColorStop(1, '#e2e3f2'); }
+    else if (luxe()) { g.addColorStop(0, '#070b18'); g.addColorStop(1, '#141c33'); }
     else { g.addColorStop(0, '#1b1f2a'); g.addColorStop(1, '#12141a'); }
     ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (luxe()) { // bintang malam (berkelip pelan)
+      for (let i = 0; i < 90; i++) {
+        const sx = hash(i, 1) * canvas.width, sy = hash(i, 2) * canvas.height;
+        ctx.globalAlpha = 0.25 + 0.5 * Math.abs(Math.sin(now / 1500 + i));
+        ctx.fillStyle = '#dfe8ff'; ctx.fillRect(sx, sy, hash(i, 3) > 0.85 ? 2 * dpr : dpr, hash(i, 3) > 0.85 ? 2 * dpr : dpr);
+      }
+      ctx.globalAlpha = 1;
+    }
     const z = R.cam.zoom * dpr;
     ctx.setTransform(z, 0, 0, z, -R.cam.x * z, -R.cam.y * z);
     ctx.drawImage(floorCanvas, 0, 0);
+    for (const f of s.facilities) if (f.type === 'pool') drawWater(ctx, VO.poolWater(f), now);
 
     // gabungkan props + karakter, urutkan dari belakang ke depan
     const people = [s.boss, ...s.agents].map((e) => [e, VO.sim.rt.get(e.id)]).filter(([, rt]) => rt);
@@ -1102,6 +1567,17 @@
     const vw = canvas.clientWidth / R.cam.zoom, vh = canvas.clientHeight / R.cam.zoom;
     R.cam.x = p.x - vw / 2;
     R.cam.y = p.y - vh / 2;
+  };
+
+  // Zoom kamera ke satu ruangan / zona (tab ruangan)
+  R.focusRect = function (canvas, s, r) {
+    updateGeo(s);
+    const pts = [iso(r.x, r.y, 70), iso(r.x + r.w, r.y, 70), iso(r.x + r.w, r.y + r.h), iso(r.x, r.y + r.h)];
+    const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x));
+    const y0 = Math.min(...pts.map((p) => p.y)), y1 = Math.max(...pts.map((p) => p.y));
+    R.cam.zoom = VO.clamp(Math.min(canvas.clientWidth / (x1 - x0), canvas.clientHeight / (y1 - y0)) * 0.85, 0.5, 2.4);
+    R.cam.x = (x0 + x1) / 2 - canvas.clientWidth / R.cam.zoom / 2;
+    R.cam.y = (y0 + y1) / 2 - canvas.clientHeight / R.cam.zoom / 2;
   };
 
   // Tampilkan area yang berisi ruangan/zona/furnitur (bukan seluruh lantai kosong)

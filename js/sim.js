@@ -30,6 +30,11 @@
         for (let y = t.y; y < t.y + t.h; y++) for (let x = t.x; x < t.x + t.w; x++) set(x, y);
       }
       if (f.type === 'pantry') for (let x = f.x + 1; x < f.x + f.w - 1; x++) set(x, f.y + 1);
+      if (f.type === 'pool') {
+        const w = VO.poolWater(f);
+        for (let y = w.y; y < w.y + w.h; y++) for (let x = w.x; x < w.x + w.w; x++) set(x, y);
+        for (const l of VO.poolLoungers(f)) set(l.x, l.y);
+      }
     }
     for (const d of s.departments) {
       walls(d.room, null);
@@ -334,7 +339,11 @@
     if (r < 0.3) {
       const spot = VO.pick(sim.spots(s, 'pantry'));
       if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(3, 6), 'coffee', VO.pick(['Ngopi dulu', 'Snack time', 'Refill kafein'])), ...home], { ambient: true });
-    } else if (r < 0.48 && rt.id !== 'boss') {
+    } else if (r < 0.42 && (s.facilities.some((f) => f.type === 'pool' || f.type === 'lounge'))) {
+      // rehat sebentar di kolam renang / lounge
+      const spot = VO.pick([...sim.spots(s, 'pool'), ...sim.spots(s, 'lounge')]);
+      if (spot) sim.act(rt.id, [A.goto(spot, 'walking'), A.wait(VO.rand(4, 8), 'break', VO.pick(['Cari angin dulu', 'Rehat sebentar', 'Lihat pemandangan', 'Brainstorm santai'])), ...home], { ambient: true });
+    } else if (r < 0.55 && rt.id !== 'boss') {
       // ngobrol dengan rekan satu departemen yang sedang di mejanya
       const mates = s.agents.filter((x) => x.id !== rt.id && x.deptId && x.deptId === e.deptId && !sim.isBusy(x.id));
       const m = mates.length && VO.pick(mates);
