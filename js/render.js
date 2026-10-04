@@ -458,9 +458,11 @@
         add(cx + 2.5 + wy, (ctx, now) => wallChart(ctx, cx, wy, 2.4, members.some((m) => VO.sim.rt.get(m.id)?.working), now, div ? div.color : '#7fb2ff'));
       }
       VO.deskSlots(d.room).forEach((sl, i) => {
-        add(sl.desk.x + sl.desk.y + 1, (ctx, now) => drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#ffffff' : '#a47148'));
-        add(sl.chair.x + sl.chair.y + 0.9, (ctx) => drawChair(ctx, sl.chair.x, sl.chair.y));
-        add(sl.chair.x + sl.chair.y + 1.3, (ctx) => drawChairBack(ctx, sl.chair.x, sl.chair.y));
+        // meja pertama milik ketua tim (manager): meja L khusus + kursi eksekutif sebagai pembeda
+        const mgr = i === 0 && members[0] && members[0].isLead;
+        add(sl.desk.x + sl.desk.y + 1, (ctx, now) => mgr ? drawManagerDesk(ctx, sl.desk.x, sl.desk.y, now, members[0]) : drawDesk(ctx, sl.desk.x, sl.desk.y, now, members[i], modern() ? '#ffffff' : '#a47148'));
+        add(sl.chair.x + sl.chair.y + 0.9, (ctx) => drawChair(ctx, sl.chair.x, sl.chair.y, mgr));
+        add(sl.chair.x + sl.chair.y + 1.3, (ctx) => drawChairBack(ctx, sl.chair.x, sl.chair.y, mgr));
       });
     }
     for (const div of s.divisions) {
@@ -960,12 +962,62 @@
     box(ctx, x + 0.82, y + 0.22, x + 0.9, y + 0.3, 15, 5, '#f4efe6', { outline: false });
   }
 
-  function drawChair(ctx, x, y) {
+  // Meja manager (ketua tim): meja L lebih lebar dengan aksen, monitor besar + monitor kedua,
+  // lampu meja, papan nama, dan karpet kecil — pembeda dari meja staf
+  const mgrColors = () => luxe() ? { top: '#8a5a36', left: '#6b4429', right: '#55361f', trim: LX.gold, rug: '#3a2a1a' }
+    : robot() ? { top: '#ffffff', left: ORANGE, right: '#d9741f', trim: NAVY, rug: '#dfe3f5' }
+    : classic() ? { top: '#ffffff', left: '#d4d9ea', right: '#c2c8dc', trim: '#4a66cf', rug: '#a9b0e6' }
+    : modern() ? { top: '#2d3342', left: '#232836', right: '#1b1f2b', trim: '#3b7cff', rug: '#e4e8f0' }
+    : { top: '#6d4c7d', left: '#553a62', right: '#45304f', trim: '#ffd166', rug: '#3a3150' };
+  function drawManagerDesk(ctx, x, y, now, ent) {
+    const C = mgrColors();
+    // karpet kecil penanda area manager
+    poly(ctx, diamond(x - 0.2, y + 0.05, 1.6, 1.9), alpha(C.rug.length === 7 ? C.rug : '#888888', luxe() ? 0.9 : 0.55));
+    ctx.lineWidth = 1.5; poly(ctx, diamond(x - 0.12, y + 0.12, 1.44, 1.76), null, alpha(C.trim, 0.8)); ctx.lineWidth = 1;
+    // meja utama + sayap kanan (bentuk L)
+    const d = box(ctx, x + 0.02, y + 0.1, x + 1.0, y + 0.9, 0, 16, C);
+    box(ctx, x + 1.0, y + 0.1, x + 1.32, y + 1.25, 0, 16, C);
+    facePanel(ctx, d.fL, 0, 1, 0.82, 0.92, C.trim); // list aksen
+    // monitor besar + monitor kedua miring
+    const rt = ent && VO.sim.rt.get(ent.id);
+    const working = rt && rt.working;
+    box(ctx, x + 0.46, y + 0.3, x + 0.56, y + 0.38, 16, 6, '#1a1c22', { outline: false });
+    const m = box(ctx, x + 0.12, y + 0.26, x + 0.88, y + 0.33, 21, 20, '#14161b', { outline: false });
+    facePanel(ctx, m.fL, 0.05, 0.95, 0.08, 0.92, working ? '#0f2547' : '#1c2740');
+    if (working) for (let i = 0; i < 5; i++) {
+      const h = 0.2 + ((Math.sin(now / 280 + i * 1.4 + x) + 1) / 2) * 0.55;
+      facePanel(ctx, m.fL, 0.12 + i * 0.16, 0.22 + i * 0.16, 0.16, 0.16 + h * 0.7, ['#5ec8ff', '#7cf29a', '#ffd166', '#ff7ab6', '#9d8bff'][i]);
+    }
+    const m2 = box(ctx, x + 1.04, y + 0.2, x + 1.1, y + 0.75, 19, 13, '#14161b', { outline: false });
+    facePanel(ctx, m2.fR, 0.08, 0.92, 0.1, 0.9, working ? '#123a5c' : '#1c2740');
+    // keyboard, lampu meja, papan nama
+    poly(ctx, diamond(x + 0.28, y + 0.52, 0.44, 0.15, 16), '#2a2d34');
+    const lp = iso(x + 1.17, y + 0.95, 16);
+    ctx.strokeStyle = '#2a2b30'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lp.x, lp.y); ctx.lineTo(lp.x, lp.y - 14); ctx.lineTo(lp.x - 5, lp.y - 18); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = C.trim; ctx.beginPath(); ctx.ellipse(lp.x - 6, lp.y - 18, 4, 2.2, 0, 0, 7); ctx.fill();
+    const gl = ctx.createRadialGradient(lp.x - 6, lp.y - 12, 0, lp.x - 6, lp.y - 12, 16);
+    gl.addColorStop(0, 'rgba(255,214,140,0.35)'); gl.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = gl; ctx.fillRect(lp.x - 22, lp.y - 28, 32, 32);
+    const np = box(ctx, x + 0.6, y + 0.74, x + 0.92, y + 0.8, 16, 4, C.trim, { outline: false }); // papan nama
+    facePanel(ctx, np.fL, 0.1, 0.9, 0.25, 0.75, '#1b1f2a');
+  }
+
+  function drawChair(ctx, x, y, mgr) {
+    if (mgr) { // kursi eksekutif manager: dudukan lebih lebar
+      box(ctx, x + 0.26, y + 0.28, x + 0.74, y + 0.74, 6, 5, luxe() ? '#7a4a2c' : classic() ? '#1f2f7a' : robot() ? ORANGE : '#3b2f2a');
+      box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false });
+      return;
+    }
     box(ctx, x + 0.3, y + 0.32, x + 0.7, y + 0.72, 6, 4, luxe() ? LX.chair : classic() ? CL.chair : robot() ? NAVY : modern() ? '#7f8ba0' : '#353a46'); // dudukan
     box(ctx, x + 0.46, y + 0.46, x + 0.54, y + 0.54, 0, 6, '#22252c', { outline: false }); // tiang
   }
   // sandaran digambar SETELAH karyawan yang duduk, agar menutupi punggungnya
-  function drawChairBack(ctx, x, y) {
+  function drawChairBack(ctx, x, y, mgr) {
+    if (mgr) { // sandaran tinggi berlapis kulit
+      const b = box(ctx, x + 0.26, y + 0.7, x + 0.74, y + 0.8, 10, 26, luxe() ? '#7a4a2c' : classic() ? '#1f2f7a' : robot() ? ORANGE : '#3b2f2a');
+      facePanel(ctx, b.fL, 0.15, 0.85, 0.55, 0.9, 'rgba(255,255,255,0.08)');
+      return;
+    }
     box(ctx, x + 0.3, y + 0.7, x + 0.7, y + 0.78, 10, 16, luxe() ? LX.chairBack : classic() ? CL.chairBack : robot() ? '#1f2aa8' : modern() ? '#6f7b90' : '#2b2f3a');
   }
 

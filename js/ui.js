@@ -224,12 +224,14 @@
       { key: 'name', label: 'Nama divisi', value: div.name, required: true },
       { key: 'color', label: 'Warna', type: 'colors', value: [div.color], names: ['Warna'] },
       { key: 'hasDir', label: 'Punya direktur divisi', type: 'checkbox', value: !!dir },
+      { key: 'dirPos', label: 'Posisi meja direktur (atasan)', type: 'select', value: div.dirPos || (VO.openPlan(s) ? 'center' : 'left'), options: [{ value: 'left', label: 'Kiri' }, { value: 'center', label: 'Tengah' }, { value: 'right', label: 'Kanan' }] },
       { key: 'integration', label: 'Integrasi data (dibaca semua departemen & direktur divisi ini)', type: 'select', value: div.integration || '', options: VO.integ.options() },
     ]);
     if (!v) return;
     div.name = v.name || div.name;
     div.color = v.color[0];
     if (v.integration) div.integration = v.integration; else delete div.integration;
+    if (v.dirPos !== (div.dirPos || '')) { div.dirPos = v.dirPos; VO.placeDirector(s, div); }
     if (v.hasDir && !dir) s.agents.push(VO.makeAgent({ divisionId: id, isDirector: true, role: 'Direktur ' + div.name, shirt: '#2d3142' }));
     if (!v.hasDir && dir) VO.removeAgent(s, dir.id);
     app().layoutChanged();

@@ -122,7 +122,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'luxe', themeV3: true, themeV4: true, layout: 'open', layoutV5: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'luxe', themeV3: true, themeV4: true, layout: 'open', layoutV5: true, dirPosV7: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -373,7 +373,9 @@
   // Meja direktur: open plan → di depan-tengah ruangan, menghadap tim; gaya lama → pojok kiri atas
   VO.placeDirector = function (s, div) {
     const z = div.zone;
-    div.directorDesk = VO.openPlan(s) ? { x: z.x + Math.floor(z.w / 2), y: z.y + 2 } : { x: z.x + 2, y: z.y + 1 };
+    const pos = div.dirPos || (VO.openPlan(s) ? 'center' : 'left'); // posisi meja direktur: left | center | right
+    const x = pos === 'right' ? z.x + z.w - 3 : pos === 'left' ? z.x + 2 : z.x + Math.floor(z.w / 2);
+    div.directorDesk = { x, y: VO.openPlan(s) ? z.y + 2 : z.y + 1 };
   };
   // Direktur di open plan duduk di belakang meja menghadap tim (seperti Boss)
   VO.facesFront = (s, ent) => ent.id === 'boss' || (ent.isDirector && VO.openPlan(s));
@@ -458,6 +460,7 @@
     const needV3 = !(s.settings && s.settings.themeV3);
     const needV4 = !(s.settings && s.settings.themeV4);
     const needV5 = !(s.settings && s.settings.layoutV5);
+    const needV7 = !(s.settings && s.settings.dirPosV7);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -473,6 +476,11 @@
     if (needV4) { s.settings.theme = 'luxe'; s.settings.themeV4 = true; }
     // v5: tata ruang open plan — direktur pindah ke depan-tengah ruangan divisinya
     if (needV5) { s.settings.layout = 'open'; s.settings.layoutV5 = true; for (const div of s.divisions) if (div.zone) VO.placeDirector(s, div); }
+    // v7: atasan Finance Division duduk di sisi kanan ruangan (bisa diubah di Edit Divisi)
+    if (needV7) {
+      s.settings.dirPosV7 = true;
+      for (const div of s.divisions) if (div.zone && /financ|keuangan/i.test(div.name) && !div.dirPos) { div.dirPos = 'right'; VO.placeDirector(s, div); }
+    }
     s.map = s.map || d.map;
     // tugas yang sedang berjalan tidak bisa dilanjutkan setelah reload
     for (const t of s.tasks) if (!['done', 'failed'].includes(t.status)) t.status = 'failed', (t.note = 'Terputus (halaman dimuat ulang)');
