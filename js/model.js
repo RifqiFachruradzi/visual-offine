@@ -23,6 +23,7 @@
   // Gemini dipakai dulu karena ada free tier. Alias *-latest selalu menunjuk versi terbaru.
   VO.DEFAULT_MODEL = 'gemini-flash-latest';
   VO.MODELS = [
+    { id: '9router', label: '9router (VPS — model default router)', provider: '9router' },
     { id: 'gemini-flash-latest', label: 'Gemini Flash (gratis)', provider: 'gemini' },
     { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite (gratis, paling hemat)', provider: 'gemini' },
     { id: 'gemini-pro-latest', label: 'Gemini Pro (kuota gratis terbatas)', provider: 'gemini' },

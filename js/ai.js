@@ -43,7 +43,7 @@
     } catch (e) { return null; }
   };
 
-  ai.label = () => (ai.providers.includes('gemini') ? 'Gemini' : ai.providers.includes('claude') ? 'Claude' : 'AI');
+  ai.label = () => ({ '9router': '9router', gemini: 'Gemini', claude: 'Claude' })[ai.providers[0]] || 'AI';
 
   ai.systemPrompt = function (s, ent, long) {
     const dept = s.departments.find((d) => d.id === ent.deptId);

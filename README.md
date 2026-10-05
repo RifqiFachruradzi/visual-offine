@@ -198,3 +198,18 @@ API gratis tanpa key dari [public-apis/public-apis](https://github.com/public-ap
 
 Cara pakai: klik divisi/departemen → **Edit** → **Integrasi data** → pilih salah satu → **Tes koneksi**. Kota untuk cuaca diisi di form yang sama
 (default Jakarta, atau env `WEATHER_CITY`). Tidak perlu API key atau pengaturan Vercel tambahan.
+
+## Integrasi 9router (AI dari VPS sendiri)
+
+Visual Office bisa memakai [9router](https://github.com/decolua/9router) atau router lain yang kompatibel OpenAI
+(`/v1/chat/completions`, streaming) sebagai otak karyawan AI. Isi di Vercel → Settings → Environment Variables, lalu **Redeploy**:
+
+| Variabel | Contoh | Keterangan |
+|---|---|---|
+| `NINEROUTER_BASE_URL` | `https://38-9-46-94.sslip.io/v1` | URL publik 9router (HTTPS). Jangan `127.0.0.1` — Vercel tidak bisa menjangkau localhost VPS |
+| `NINEROUTER_API_KEY` | `sk-…` | Key dari dashboard 9router |
+| `NINEROUTER_MODEL` | `cc/claude-sonnet-4-5` | Model/combo default di 9router |
+| `AI_PROVIDER` | `gemini` | Opsional: paksa kembali ke Gemini |
+
+Bila 9router diisi, **semua agen** memakai 9router (pil AI di bar atas menampilkan "9router"). Model khusus per agen:
+pilih model `9router` di form agen, atau tulis model `9router:<nama-model>` lewat Export/Import JSON.
