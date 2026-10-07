@@ -329,6 +329,9 @@
     const mw = s.map.w, mh = s.map.h;
     const mz = VO.mezz(s);
     const M = mz ? mz.M : -1;
+    // Cache the platform shadow with the floor, not in the animation loop.
+    ctx.save(); ctx.shadowColor = 'rgba(29,59,49,0.22)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 16;
+    poly(ctx, diamond(0, 0, mw, mh), '#d3ddd5'); ctx.restore();
     // tepi platform
     const A = iso(0, mh), B = iso(mw, mh), C = iso(mw, mz ? M + 0.002 : 0);
     poly(ctx, [A, B, { x: B.x, y: B.y + 14 }, { x: A.x, y: A.y + 14 }], '#cfd3da');
@@ -344,13 +347,13 @@
         const up = mz && y < M;
         const y0 = mz && y === M ? M + 0.002 : y; // baris pertama lantai 1 dimulai tepat di bawah tepi mezanin
         const pts = diamond(x, y0, 1, 1 - (y0 - y));
-        if (z && z.startsWith('d:')) { poly(ctx, pts, mix(z.slice(2), '#ffffff', 0.35), 'rgba(0,0,0,0.04)'); continue; }
+        if (z && z.startsWith('d:')) { poly(ctx, pts, mix(z.slice(2), '#e9eee9', 0.77), 'rgba(32,62,54,0.025)'); continue; }
         if (z && z.startsWith('f:')) { poly(ctx, pts, z.slice(2), 'rgba(0,0,0,0.05)'); continue; }
-        if (up) { poly(ctx, pts, (x + y) % 2 ? '#eef0f3' : '#e8ebef', 'rgba(0,0,0,0.04)'); continue; }
+        if (up) { poly(ctx, pts, (x + y) % 2 ? '#e9ece7' : '#e5e9e4', 'rgba(0,0,0,0.04)'); continue; }
         // lantai kayu terang di lantai 1 (di dalam ruangan divisi diberi sedikit warna divisi)
-        const wood = (x * 3 + y) % 4 === 0 ? '#dcbf93' : '#e3c79c';
-        poly(ctx, pts, z && z.startsWith('z:') ? mix(wood, z.slice(2), 0.13) : wood);
-        ctx.strokeStyle = 'rgba(120,80,30,0.14)'; ctx.beginPath();
+        const wood = ['#dfcdb1', '#e1cfb4', '#ddcbae', '#e3d2b8'][(Math.floor(x / 4) + y) % 4];
+        poly(ctx, pts, z && z.startsWith('z:') ? mix(wood, z.slice(2), 0.04) : wood);
+        ctx.strokeStyle = 'rgba(110,86,55,0.07)'; ctx.beginPath();
         for (let k = 1; k < 3; k++) { const a = iso(x, y + k / 3), b = iso(x + 1, y + k / 3); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
         const u = x + hash(x, y); const j0 = iso(u, y0), j1 = iso(u, y + 1); ctx.moveTo(j0.x, j0.y); ctx.lineTo(j1.x, j1.y);
         ctx.stroke();
@@ -635,7 +638,7 @@
     add(-1000, (ctx) => { // dinding kiri lantai 1 (dan lantai 2)
       const g = box(ctx, -0.35, mz ? M + 0.002 : 0, 0, mh, 0, mz ? ZM : 64, { top: '#d5d9df', left: '#eceef1', right: '#f4f5f7' }, { outline: false });
       const n = Math.floor((mh - M) / 6);
-      for (let i = 0; i < n; i++) { const u0 = (i + 0.3) / n, u1 = (i + 0.75) / n; facePanel(ctx, g.fR, u0, u1, 0.3, 0.85, '#ffffff'); facePanel(ctx, g.fR, u0 + 0.01, u1 - 0.01, 0.34, 0.81, '#a7d8ff'); }
+      for (let i = 0; i < n; i++) { const u0 = (i + 0.3) / n, u1 = (i + 0.75) / n; facePanel(ctx, g.fR, u0, u1, 0.3, 0.85, '#ffffff'); studioWindow(ctx, g.fR, u0 + 0.01, u1 - 0.01, 0.34, 0.81, i); }
       if (mz) {
         const u = box(ctx, -0.35, 0, 0, M, 0, 64, { top: '#d5d9df', left: '#eceef1', right: '#f4f5f7' }, { outline: false });
         facePanel(ctx, u.fR, 0.3, 0.7, 0.35, 0.85, '#ffffff'); facePanel(ctx, u.fR, 0.32, 0.68, 0.39, 0.81, '#a7d8ff');
@@ -644,7 +647,7 @@
     if (!mz) return;
     add(-999, (ctx) => { // dinding belakang lantai 2
       const g = box(ctx, 0, -0.35, mw, 0, 0, 64, { top: '#d5d9df', left: '#f4f5f7', right: '#e3e6eb' }, { outline: false });
-      for (let x = 4; x < mw - 3; x += 7) { facePanel(ctx, g.fL, x / mw, (x + 3) / mw, 0.35, 0.85, '#ffffff'); facePanel(ctx, g.fL, (x + 0.1) / mw, (x + 2.9) / mw, 0.39, 0.81, '#a7d8ff'); }
+      for (let x = 4; x < mw - 3; x += 7) { facePanel(ctx, g.fL, x / mw, (x + 3) / mw, 0.21, 0.9, '#667f79'); studioWindow(ctx, g.fL, (x + 0.1) / mw, (x + 2.9) / mw, 0.25, 0.86, x); }
     });
     // pagar kaca tepi mezanin (kecuali di mulut tangga)
     for (let x = 0; x < mw; x++) {
@@ -671,6 +674,21 @@
       }
       ctx.lineWidth = 1; ELEV_OFF = false;
     });
+  }
+
+  // Cached architectural details; windows are part of the existing wall props.
+  function studioWindow(ctx, face, u0, u1, v0, v1, seed) {
+    const a = onFace(face, u0, v1), b = onFace(face, u1, v0);
+    const sky = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    sky.addColorStop(0, '#99bcb9'); sky.addColorStop(0.55, '#d1e3dc'); sky.addColorStop(1, '#f1e9cf');
+    facePanel(ctx, face, u0, u1, v0, v1, sky);
+    const du = (u1 - u0) / 9, dv = v1 - v0;
+    for (let i = 0; i < 9; i++) {
+      const h = 0.15 + hash(seed, i) * 0.38;
+      facePanel(ctx, face, u0 + i * du, u0 + (i + 0.82) * du, v0, v0 + dv * h, i % 2 ? '#8aa9a4' : '#a6beb6');
+    }
+    facePanel(ctx, face, u0 + (u1 - u0) * 0.49, u0 + (u1 - u0) * 0.51, v0, v1, '#667f79');
+    poly(ctx, [onFace(face, u0, v1), onFace(face, u0 + (u1-u0)*0.35, v1), onFace(face, u0 + (u1-u0)*0.75, v0), onFace(face, u0 + (u1-u0)*0.6, v0)], 'rgba(255,255,255,0.22)');
   }
 
   // Pemandangan kota malam di permukaan dinding kaca (seed = posisi agar menyambung)
@@ -1104,6 +1122,13 @@
   function drawDesk(ctx, x, y, now, ent, topColor, exec) {
     if (exec) return drawExecDesk(ctx, x, y, now, ent);
     if (luxe()) return drawDeskLuxe(ctx, x, y, now, ent);
+    if (studio()) {
+      const q = iso(x + 0.56, y + 0.58);
+      const sh = ctx.createRadialGradient(q.x, q.y, 2, q.x, q.y, 28);
+      sh.addColorStop(0, 'rgba(33,48,42,0.18)'); sh.addColorStop(1, 'rgba(33,48,42,0)');
+      ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(q.x, q.y, 30, 17, 0, 0, Math.PI * 2); ctx.fill();
+      topColor = '#f5eedf';
+    }
     if (modern()) { // meja putih dengan kaki ramping
       box(ctx, x + 0.06, y + 0.14, x + 0.94, y + 0.86, 12, 3, { top: topColor, left: '#dde1e8', right: '#cdd2db' }, { outline: false });
       for (const [lx, ly] of [[0.1, 0.18], [0.86, 0.18], [0.1, 0.78], [0.86, 0.78]]) box(ctx, x + lx, y + ly, x + lx + 0.04, y + ly + 0.04, 0, 12, '#b8bfcb', { outline: false });
@@ -1260,8 +1285,8 @@
           ctx.beginPath(); ctx.ellipse(q.x, q.y - 22, 11, 15, 0, 0, 7); ctx.fill();
           break;
         }
-        if (luxe()) { // tanaman tropis dalam pot hitam tinggi
-          box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 16, { top: '#3a3b40', left: '#2a2b30', right: '#1f2024' }, { outline: false });
+        if (luxe() || studio()) { // tanaman tropis dalam pot hitam tinggi
+          box(ctx, x + 0.32, y + 0.32, x + 0.68, y + 0.68, 0, 16, studio() ? { top: '#e4d7c6', left: '#c3b39e', right: '#a99781' } : { top: '#3a3b40', left: '#2a2b30', right: '#1f2024' }, { outline: false });
           const q = iso(x + 0.5, y + 0.5, 16);
           ctx.fillStyle = '#3b2a1c'; ctx.beginPath(); ctx.ellipse(q.x, q.y, 8, 4, 0, 0, 7); ctx.fill();
           for (let i = 0; i < 9; i++) {
@@ -1378,6 +1403,97 @@
    * Gambar avatar dengan kaki di (0,0) koordinat lokal. Menghadap kanan-bawah
    * secara default; o.mirror membalik ke kiri; o.back = tampak belakang.
    */
+  // Studio characters: rounded silhouettes, shaded materials and expressive faces.
+  // Uses the same feet origin / head-height contract as the other avatar renderers.
+  function drawStudioAvatar(ctx, a, o) {
+    const skin = a.skin || '#dba67b', hair = a.hair || '#32302e';
+    const top = a.top || a.shirt || '#607e78', pants = a.pants || '#33434b';
+    const step = o.moving ? Math.sin(o.phase * 13) : 0;
+    const lift = o.sitting ? -9 : Math.abs(step) * 1.4;
+    const grad = (x, y, w, h, color) => {
+      const g = ctx.createLinearGradient(x, y, x+w, y+h);
+      g.addColorStop(0, shade(color, 1.2)); g.addColorStop(0.45, color); g.addColorStop(1, shade(color, 0.72)); return g;
+    };
+    const oval = (x,y,rx,ry,color) => { ctx.fillStyle=color; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill(); };
+    const capsule = (x,y,w,h,r,color) => { ctx.fillStyle=color; rr(ctx,x,y,w,h,r);ctx.fill(); };
+    ctx.save(); if (o.mirror) ctx.scale(-1,1);
+    oval(0,1,14,4.5,'rgba(30,48,43,0.18)');
+    ctx.translate(0,-lift);
+    // Tapered trousers and white-soled shoes.
+    for (const [x,off] of [[-7,step*2],[1,-step*2]]) {
+      capsule(x,-21+off,6.5,o.sitting?12:19,2.8,grad(x,-21,7,18,pants));
+      capsule(x-1,(o.sitting?-10:-4)+off,9,5,2.4,'#f0eee6');
+      capsule(x-1,(o.sitting?-11:-5)+off,9,4,2.2,'#35423f');
+      ctx.fillStyle='#c8d3ce';ctx.fillRect(x+1,(o.sitting?-10:-4)+off,3,1);
+    }
+    capsule(-10,-40,20,22,6,grad(-10,-40,20,22,top));
+    if (!o.back) {
+      if (a.style === 'suit' || a.style === 'shirt') {
+        poly(ctx,[{x:-4,y:-40},{x:4,y:-40},{x:0,y:-28}],'#faf4e9');
+        poly(ctx,[{x:-1.3,y:-37},{x:1.3,y:-37},{x:2,y:-28},{x:0,y:-26},{x:-2,y:-28}],a.tie||'#b96b4b');
+        if(a.style==='suit') {
+          poly(ctx,[{x:-7,y:-39},{x:-4,y:-30},{x:-1,y:-32},{x:-4,y:-40}],shade(top,1.25));
+          poly(ctx,[{x:7,y:-39},{x:4,y:-30},{x:1,y:-32},{x:4,y:-40}],shade(top,0.82));
+        }
+      } else {
+        capsule(-3.5,-39,7,17,2,'#f4ead7');
+        oval(0,-34,1.2,1.2,'#ddb66a');
+      }
+      // Lanyard badge adds a readable workplace detail at close zoom.
+      capsule(4,-30,4,5.5,0.8,'#f5f2e9');ctx.fillStyle='#74a99a';ctx.fillRect(4.7,-28.8,2.6,1.4);
+    } else { ctx.strokeStyle=shade(top,0.82);ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(0,-36);ctx.lineTo(0,-21);ctx.stroke(); }
+    const arm = (x,phase) => {
+      const off = o.working ? Math.sin(o.now/110+phase)*1.1 : step*(phase?2:-2);
+      capsule(x,-38+off,5,16,2.5,grad(x,-38,5,16,top));
+      oval(x+2.5,-21+off,2.8,3.2,grad(x,-23,5,6,skin));
+      capsule(x,-25+off,5,2,0.5,'#e8e8df');
+    };
+    arm(-14,0);arm(9,1);
+    capsule(-3,-44,6,6,2,shade(skin,0.9));
+    const hy=-53;
+    if(a.hairStyle===2) capsule(-12,hy-6,24,25,8,grad(-12,hy-6,24,25,hair));
+    oval(-10.5,hy+1,2.6,3.7,shade(skin,0.9));oval(10.5,hy+1,2.6,3.7,shade(skin,0.87));
+    oval(0,hy,11.7,12.5,grad(-10,hy-10,22,24,skin));
+    if(o.back) {
+      oval(0,hy-1,12,12.5,grad(-12,hy-13,24,25,hair));
+      if(a.hairStyle===4)oval(0,hy-5,10,9,grad(-9,hy-12,18,18,skin));
+      if(a.hairStyle===2)capsule(-11,hy,22,17,7,grad(-11,hy,22,17,hair));
+      if(a.hairStyle===3)oval(-3,hy-13,6,5.5,grad(-8,hy-18,12,11,hair));
+    } else {
+      const blink = o.now > 0 && (o.now + String(o.seed||'').length*283)%4700 < 130;
+      for(const x of [-3,5]) {
+        if(blink) capsule(x-1.5,hy+1,3,0.9,0.4,'#263332');
+        else { oval(x,hy,1.65,2.25,'#263332');oval(x-0.45,hy-0.65,0.55,0.7,'#fff'); }
+        capsule(x-2,hy-4,3.6,1,0.5,shade(hair,0.85));
+      }
+      oval(-6,hy+4,2.5,1.3,'rgba(199,97,75,0.2)');oval(8,hy+4,2,1.2,'rgba(199,97,75,0.2)');
+      oval(2,hy+3,1.4,1.2,shade(skin,0.86));
+      ctx.strokeStyle=shade(skin,0.52);ctx.lineWidth=1;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-1,hy+7);ctx.quadraticCurveTo(2,hy+9,5,hy+6.5);ctx.stroke();
+      if(o.talking)oval(2,hy+7,1.8,1.4,'#855a4b');
+      if(a.mustache)capsule(-1,hy+5,7,2,1,hair);
+      // All six saved hairstyles remain distinct.
+      ctx.fillStyle=grad(-12,hy-15,24,17,hair);
+      if(a.hairStyle===4) {
+        capsule(-11,hy-4,3,8,1.5,hair);capsule(9,hy-4,3,7,1.5,hair);
+      } else if(a.hairStyle===5) {
+        for(const [x,y,r] of [[-9,-7,4.5],[-6,-12,5.3],[0,-13,5.5],[6,-11,5.4],[10,-6,4]])oval(x,hy+y,r,r,grad(x-r,hy+y-r,r*2,r*2,hair));
+      } else {
+        ctx.beginPath();ctx.moveTo(-11,hy+1);ctx.bezierCurveTo(-16,hy-17,9,hy-20,12,hy-5);
+        ctx.quadraticCurveTo(5,hy-4,0,hy-8);ctx.quadraticCurveTo(-3,hy-1,-8,hy-3);ctx.lineTo(-8,hy+2);ctx.closePath();ctx.fill();
+        ctx.strokeStyle=shade(hair,1.22);ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(-8,hy-10);ctx.quadraticCurveTo(0,hy-16,7,hy-10);ctx.stroke();
+        if(a.hairStyle===2)capsule(-11,hy-3,5,18,2,hair);
+        if(a.hairStyle===3)oval(-4,hy-15,6,5.5,grad(-10,hy-20,12,11,hair));
+        if(a.hairStyle===1){ctx.fillStyle=hair;ctx.beginPath();ctx.moveTo(-7,hy-8);ctx.quadraticCurveTo(2,hy+1,11,hy-5);ctx.lineTo(6,hy-12);ctx.fill();}
+      }
+      if(a.glasses) {
+        ctx.strokeStyle='#40544e';ctx.lineWidth=1.1;
+        rr(ctx,-6,hy-2.8,6,5.5,1.8);ctx.stroke();rr(ctx,2,hy-2.8,6,5.5,1.8);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,hy-0.5);ctx.lineTo(2,hy-0.5);ctx.stroke();
+      }
+    }
+    ctx.restore();return hy-20-lift;
+  }
+
   function drawAvatar(ctx, a, o) {
     const skin = a.skin, hair = a.hair, top = a.top || a.shirt, pants = a.pants || '#3b3f4a', tie = a.tie || '#c62828';
     const style = a.style || 'suit';
@@ -1724,7 +1840,7 @@
     const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;
     const talking = !!(rt.bubble && rt.bubble.until > now && now - (rt.bubble.until - 3000) < 1600);
     const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id, happy, talking, cheer: rt.status === 'chat' };
-    const headTop = robot() ? drawRobot(ctx, look, opts) : drawAvatar(ctx, look, opts);
+    const headTop = robot() ? drawRobot(ctx, look, opts) : studio() ? drawStudioAvatar(ctx, look, opts) : drawAvatar(ctx, look, opts);
     if (ent.id === 'boss') { // mahkota
       ctx.fillStyle = '#ffca28';
       const y = headTop + 2;
@@ -1767,10 +1883,10 @@
   function drawLabelsStudio(ctx, s) {
     const plate = (p, text, color) => {
       ctx.save();
-      ctx.font = "bold 10.5px 'Courier New', ui-monospace, monospace";
+      ctx.font = "600 11px Inter, system-ui, sans-serif";
       try { ctx.letterSpacing = '1px'; } catch (e) {}
       const tw = ctx.measureText(text).width + 16;
-      ctx.fillStyle = 'rgba(48,52,62,0.92)'; rr(ctx, p.x - tw / 2, p.y - 9, tw, 17, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(32,58,50,0.93)'; rr(ctx, p.x - tw / 2, p.y - 9, tw, 19, 6); ctx.fill();
       ctx.fillStyle = color; ctx.fillText(text, p.x - tw / 2 + 8, p.y + 3.5);
       ctx.restore();
     };
@@ -2058,7 +2174,7 @@
     updateGeo(s);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    if (studio()) { g.addColorStop(0, '#f3f4f7'); g.addColorStop(1, '#e2e5eb'); }
+    if (studio()) { g.addColorStop(0, '#e9f0ed'); g.addColorStop(1, '#cddcd7'); }
     else if (robot()) { g.addColorStop(0, '#f3f4fa'); g.addColorStop(1, '#e3e6f2'); }
     else if (modern()) { g.addColorStop(0, '#f6f8fb'); g.addColorStop(1, '#e4e9f1'); }
     else if (classic()) { g.addColorStop(0, '#f4f4fb'); g.addColorStop(1, '#e2e3f2'); }
@@ -2160,15 +2276,15 @@
   /* ------------------------------------------------------------ potret (inspector) */
   const portraitCache = new Map();
   R.portrait = function (ent) {
-    const key = [theme() === 'robot', ent.role, ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss', ent.isLead, ent.isDirector].join('|');
+    const key = [theme(), ent.role, ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss', ent.isLead, ent.isDirector].join('|');
     if (portraitCache.has(key)) return portraitCache.get(key);
     const c = document.createElement('canvas');
     c.width = 88; c.height = 88;
     const ctx = c.getContext('2d');
     ctx.scale(2, 2);
-    ctx.translate(22, 70);
+    ctx.translate(22, studio() ? 78 : 70);
     const po = { back: false, mirror: false, moving: false, phase: 0, sitting: false, working: false, now: 0, seed: ent.id };
-    const top = theme() === 'robot' ? drawRobot(ctx, ent, po) : drawAvatar(ctx, ent, po);
+    const top = theme() === 'robot' ? drawRobot(ctx, ent, po) : studio() ? drawStudioAvatar(ctx, ent, po) : drawAvatar(ctx, ent, po);
     if (ent.id === 'boss') poly(ctx, [{ x: -7, y: top + 2 }, { x: -7, y: top - 5 }, { x: -3.5, y: top - 1 }, { x: 0, y: top - 7 }, { x: 3.5, y: top - 1 }, { x: 7, y: top - 5 }, { x: 7, y: top + 2 }], '#ffca28');
     const url = c.toDataURL();
     portraitCache.set(key, url);

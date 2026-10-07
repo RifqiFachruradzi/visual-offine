@@ -242,6 +242,7 @@
     const t = app.state.settings.theme || 'studio';
     document.body.classList.toggle('light', t !== 'pixel' && t !== 'luxe');
     document.body.classList.toggle('luxe', t === 'luxe');
+    document.body.classList.toggle('studio', t === 'studio');
     const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
     const b = $('btnTheme');
     b.innerHTML = VO.icon(THEME_ICON[t]);
