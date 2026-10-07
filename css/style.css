@@ -291,3 +291,33 @@ body.luxe button.primary { color: #1a1408; }
 .zoomctl button:hover { background: var(--hover-bg); color: var(--accent); }
 .zoomctl .pct { font-size: 10.5px; font-weight: 700; color: var(--muted); height: 22px; }
 .zoomctl svg { width: 15px; height: 15px; }
+
+/* Studio: warm architectural palette and calmer workspace chrome. */
+body.studio {
+  --bg: #e8eeea; --panel: #fafbf8; --panel-2: #f0f4ef;
+  --line: #dce4db; --text: #263e35; --muted: #64776d;
+  --accent: #246650; --primary: #286b53; --input: #ffffff;
+  --hover: #9caf9f; --hover-bg: #e7eee5; --sel-bg: #e0eddf;
+  --card: #ffffff; --float: rgba(250,252,248,.96);
+  --hint-bg: rgba(250,252,248,.92); --soft: #466053; --dash: #c2d0c2;
+}
+body.studio .topbar { box-shadow: 0 2px 14px rgba(38,62,53,.04); }
+body.studio .company { letter-spacing: -.025em; }
+body.studio .panel-head { padding-top: 16px; padding-bottom: 16px; }
+body.studio .panel-head h2, body.studio .card h3 { font-size: 11px; letter-spacing: .1em; }
+body.studio .panel.right { padding: 14px; gap: 14px; }
+body.studio .card { background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 3px 12px rgba(38,62,53,.025); }
+body.studio .node { padding-top: 6px; padding-bottom: 6px; border-radius: 8px; }
+body.studio .node.div { margin-top: 14px; }
+body.studio .node.sel { outline-color: #b4cdb8; }
+body.studio .node .ni.director { color: #6c7196; }
+body.studio .roomtabs, body.studio .zoomctl { box-shadow: 0 6px 22px rgba(38,62,53,.1); border-color: rgba(255,255,255,.8); }
+body.studio .roomtabs { padding: 6px; gap: 3px; }
+body.studio .roomtabs .rt { padding: 8px 12px; }
+body.studio .roomtabs .rt.on { background: #286b53; color: #fff; }
+body.studio .hint { border: 1px solid #dce4db; border-radius: 8px; padding: 7px 10px; }
+body.studio button.primary { box-shadow: 0 2px 4px rgba(38,62,53,.08); }
+body.studio button:focus-visible, body.studio input:focus-visible, body.studio select:focus-visible { outline: 2px solid #286b53; outline-offset: 3px; }
+@media (pointer: coarse) {
+  body.studio .roomtabs .rt, body.studio .zoomctl button { min-height: 44px; }
+}
