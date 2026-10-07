@@ -235,18 +235,13 @@
     $('aiMode').parentElement.title = VO.ai.available ? 'Agen mengerjakan tugas dengan AI sungguhan (' + VO.ai.reason + ')' : VO.ai.reason;
   }
 
-  const THEMES = ['studio', 'luxe', 'classic', 'robot', 'modern', 'pixel'];
-  const THEME_LABEL = { studio: 'Studio (2 lantai)', luxe: 'Penthouse (malam)', classic: 'Kantor Klasik', robot: 'Robot', modern: 'Modern (terang)', pixel: 'Pixel (gelap)' };
-  const THEME_ICON = { studio: 'layers', luxe: 'star', classic: 'building', robot: 'bot', modern: 'sun', pixel: 'moon' };
+  // Satu tampilan saja: Studio (kantor 2 lantai). Pilihan tema lain sudah dihapus.
   function applyTheme() {
     const t = app.state.settings.theme || 'studio';
     document.body.classList.toggle('light', t !== 'pixel' && t !== 'luxe');
     document.body.classList.toggle('luxe', t === 'luxe');
     document.body.classList.toggle('studio', t === 'studio');
-    const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
-    const b = $('btnTheme');
-    b.innerHTML = VO.icon(THEME_ICON[t]);
-    b.title = `Tampilan: ${THEME_LABEL[t]} — klik untuk ganti ke ${THEME_LABEL[next]}`;
+    // (tidak ada tombol tema)
   }
 
   // Tombol 2D / 3D: ganti proyeksi kamera, posisi & data kantor tetap sama
@@ -336,14 +331,6 @@
     $('zoomPct').onclick = () => R.fit($('office'), s());
     $('view2d').onclick = () => app.setView('2d');
     $('view3d').onclick = () => app.setView('3d');
-    $('btnTheme').onclick = () => {
-      const st = s().settings;
-      st.theme = THEMES[(THEMES.indexOf(st.theme || 'studio') + 1) % THEMES.length];
-      applyTheme();
-      app.layoutChanged(); // tema Studio mengubah grid jalan (mezanin & tangga)
-      app.changed();
-      VO.ui.toast('Tampilan ' + THEME_LABEL[st.theme], THEME_ICON[st.theme]);
-    };
     $('btnExport').onclick = () => {
       const blob = new Blob([JSON.stringify(s(), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');

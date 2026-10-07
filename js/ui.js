@@ -158,6 +158,7 @@
   function lookFields(a) {
     VO.ensureLook(a);
     return [
+      { key: 'cast', label: 'Karakter 3D', type: 'select', value: a.cast || '', options: [{ value: '', label: 'Otomatis (sesuai gaya pakaian)' }, ...(VO.CAST_LIST || []).map(([value, label]) => ({ value, label: value + ' · ' + label }))] },
       { key: 'style', label: 'Gaya pakaian', type: 'select', value: a.style, options: Object.entries(VO.STYLES).map(([value, label]) => ({ value, label })) },
       { key: 'hairStyle', label: 'Model rambut', type: 'select', value: String(a.hairStyle), options: VO.HAIR_STYLES.map((label, i) => ({ value: String(i), label })) },
       { key: 'colors', label: 'Warna (atasan · celana/rok · dasi · rambut · kulit)', type: 'colors', value: [a.top, a.pants, a.tie, a.hair, a.skin], names: ['Atasan', 'Celana / rok', 'Dasi', 'Rambut', 'Kulit'] },
@@ -167,7 +168,7 @@
   }
   function lookValues(v) {
     const [top, pants, tie, hair, skin] = v.colors;
-    return { style: v.style, hairStyle: parseInt(v.hairStyle, 10) || 0, top, topV2: true, shirt: top, pants, tie, hair, skin, glasses: v.glasses, mustache: v.mustache };
+    return { cast: v.cast || '', style: v.style, hairStyle: parseInt(v.hairStyle, 10) || 0, top, topV2: true, shirt: top, pants, tie, hair, skin, glasses: v.glasses, mustache: v.mustache };
   }
 
   async function agentForm(title, a, isNew) {

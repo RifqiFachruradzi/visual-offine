@@ -1814,6 +1814,60 @@
   }
   R.drawRobot = drawRobot;
 
+  /* ------------------------------------------------------------ karakter 3D (office_cast_lineup.glb) */
+  // 14 karakter dari office_cast_lineup.glb dipra-render (three.js, tools/cast/) menjadi sprite sheet:
+  // baris = depan | belakang | samping(kanan); kolom = idle, jalan×4, duduk, mengetik×2, sorak.
+  const CAST = (R.cast = { ready: false, meta: null, chars: [], img: {} });
+  fetch('assets/cast/cast.json').then((r) => r.json()).then((j) => {
+    CAST.meta = j.meta; CAST.chars = j.chars;
+    let left = j.chars.length;
+    for (const c of j.chars) {
+      const im = new Image();
+      im.onload = () => { CAST.img[c.id] = im; if (--left === 0) { CAST.ready = true; portraitCache.clear(); } };
+      im.onerror = () => { left--; };
+      im.src = `assets/cast/cast-${c.id}.png`;
+    }
+  }).catch(() => {});
+  // kelompok karakter per gaya; dipilih deterministik dari id agen (bisa ditimpa ent.cast)
+  const CAST_GROUP = { suit: ['01', '06', '07', '11', '12', '13', '04'], shirt: ['02', '08', '10', '14'], cardigan: ['03', '05', '09'] };
+  VO.CAST_LIST = [
+    ['01', 'Manajer jas navy'], ['02', 'Kemeja biru'], ['03', 'Kardigan pink'], ['04', 'Jas coklat berkacamata'], ['05', 'Kardigan pirang'],
+    ['06', 'Manajer jas abu (botak)'], ['07', 'Jas navy dasi merah (berjenggot)'], ['08', 'Dasi hijau'], ['09', 'Kardigan magenta (kepang)'],
+    ['10', 'Kemeja biru muda'], ['11', 'Senior jas (botak)'], ['12', 'Jas hitam'], ['13', 'Jas dasi merah'], ['14', 'Kemeja berkumis'],
+  ];
+  VO.castOf = function (ent) {
+    if (ent.cast && /^\d\d$/.test(ent.cast)) return ent.cast;
+    if (ent.id === 'boss') return '12';
+    if (ent.glasses) return '04';
+    if (ent.mustache) return '14';
+    const g = CAST_GROUP[ent.style] || CAST_GROUP.suit;
+    let h = 0; for (const ch of String(ent.id || ent.name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return g[h % g.length];
+  };
+  const CAST_SCALE = 0.4; // tinggi berdiri ≈ 57 px dunia
+  // Gambar satu karakter; kaki di (0,0). Mengembalikan y puncak kepala (lokal).
+  function drawCast(ctx, ent, o) {
+    const im = CAST.img[VO.castOf(ent)];
+    const M = CAST.meta;
+    let col = 0;
+    if (o.happy > 0 || o.cheer) col = 8;
+    else if (o.moving) col = 1 + (Math.floor(o.phase * 7) % 4);
+    else if (o.sitting) col = o.working ? 6 + (Math.floor(o.now / 170) % 2) : 5;
+    const row = o.side ? 2 : o.back ? 1 : 0;
+    const sw = M.frameW, sh = M.frameH;
+    const dw = sw * CAST_SCALE, dh = sh * CAST_SCALE;
+    const ax = M.anchorX * CAST_SCALE, ay = M.anchorY * CAST_SCALE;
+    // bayangan
+    ctx.fillStyle = 'rgba(30,35,50,0.18)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 12, 4.5, 0, 0, 7); ctx.fill();
+    ctx.save();
+    if (o.mirror && o.side) ctx.scale(-1, 1);
+    const bob = !o.moving && !o.sitting ? Math.sin(o.now / 520 + (o.seedN || 0)) * 0.4 : 0;
+    ctx.drawImage(im, col * sw, row * sh, sw, sh, -ax, -ay + bob, dw, dh);
+    ctx.restore();
+    return (M.headY - M.anchorY) * CAST_SCALE + (o.sitting ? 0.45 * M.unitPx * CAST_SCALE : 0) - 2;
+  }
+
   function drawPerson(ctx, s, ent, rt, now) {
     const fx = rt.x / T, fy = rt.y / T;
     const p = iso(fx, fy);
@@ -1823,9 +1877,10 @@
       if (VO.facesFront(s, ent)) { back = false; mirror = true; } // boss & direktur open plan menghadap ke depan (+ty)
       else { back = true; mirror = false; } // karyawan menghadap meja (-ty)
     } else if (rt.mdx != null) {
-      const sx = OBL ? rt.mdx : rt.mdx - rt.mdy, sy = OBL ? rt.mdy : rt.mdx + rt.mdy; // arah di layar
+      const sx = OBL || FLAT ? rt.mdx : rt.mdx - rt.mdy, sy = OBL || FLAT ? rt.mdy : rt.mdx + rt.mdy; // arah di layar
       back = sy < -0.1;
       mirror = sx < -0.1;
+      var side = Math.abs(sx) > Math.abs(sy) * 1.3; // berjalan menyamping → sprite samping
     }
     const sel = R.selected === ent.id, hov = R.hover === ent.id;
     if (sel || hov) {
@@ -1834,13 +1889,15 @@
     }
     ctx.save();
     ctx.translate(p.x, p.y + (rt.sitting && back ? -2 : 0));
-    const SC = FLAT ? 0.95 : luxe() ? 1.25 : 1.15;
+    const castOn = CAST.ready && CAST.img[VO.castOf(ent)];
+    const SC = castOn ? (FLAT ? 0.85 : 1) : FLAT ? 0.95 : luxe() ? 1.25 : 1.15;
     ctx.scale(SC, SC);
     const look = ent.live ? { ...ent, top: '#d97757', style: 'shirt', tie: '#5e2b1c' } : ent;
     const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;
     const talking = !!(rt.bubble && rt.bubble.until > now && now - (rt.bubble.until - 3000) < 1600);
     const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id, happy, talking, cheer: rt.status === 'chat' };
-    const headTop = robot() ? drawRobot(ctx, look, opts) : studio() ? drawStudioAvatar(ctx, look, opts) : drawAvatar(ctx, look, opts);
+    opts.side = !rt.sitting && !!side; opts.seedN = (ent.id || '').length;
+    const headTop = castOn ? drawCast(ctx, look, opts) : robot() ? drawRobot(ctx, look, opts) : studio() ? drawStudioAvatar(ctx, look, opts) : drawAvatar(ctx, look, opts);
     if (ent.id === 'boss') { // mahkota
       ctx.fillStyle = '#ffca28';
       const y = headTop + 2;
@@ -2276,6 +2333,19 @@
   /* ------------------------------------------------------------ potret (inspector) */
   const portraitCache = new Map();
   R.portrait = function (ent) {
+    if (CAST.ready && CAST.img[VO.castOf(ent)]) { // potret = kepala & bahu karakter 3D (frame depan, idle)
+      const id = VO.castOf(ent), key = 'cast|' + id + '|' + (ent.id === 'boss');
+      if (portraitCache.has(key)) return portraitCache.get(key);
+      const M = CAST.meta, c = document.createElement('canvas');
+      c.width = 88; c.height = 88;
+      const ctx = c.getContext('2d');
+      const hy = M.headY, crop = M.frameW * 0.62;
+      ctx.drawImage(CAST.img[id], (M.frameW - crop) / 2, hy - 6, crop, crop, 0, 0, 88, 88);
+      if (ent.id === 'boss') poly(ctx, [{ x: 30, y: 16 }, { x: 30, y: 4 }, { x: 37, y: 10 }, { x: 44, y: 1 }, { x: 51, y: 10 }, { x: 58, y: 4 }, { x: 58, y: 16 }], '#ffca28');
+      const url = c.toDataURL();
+      portraitCache.set(key, url);
+      return url;
+    }
     const key = [theme(), ent.role, ent.skin, ent.hair, ent.hairStyle, ent.top, ent.pants, ent.tie, ent.style, ent.glasses, ent.mustache, ent.id === 'boss', ent.isLead, ent.isDirector].join('|');
     if (portraitCache.has(key)) return portraitCache.get(key);
     const c = document.createElement('canvas');

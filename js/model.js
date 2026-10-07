@@ -105,7 +105,7 @@
     shirt: o.shirt || VO.pick(VO.SHIRTS),
     live: !!o.live,
     memory: Array.isArray(o.memory) ? o.memory : [],
-    style: o.style, hairStyle: o.hairStyle, top: o.top, topV2: o.top ? true : undefined, pants: o.pants, tie: o.tie, glasses: o.glasses, mustache: o.mustache,
+    cast: o.cast || '', style: o.style, hairStyle: o.hairStyle, top: o.top, topV2: o.top ? true : undefined, pants: o.pants, tie: o.tie, glasses: o.glasses, mustache: o.mustache,
   });
 
   /* ---------------------------------------------------------------- default */
@@ -494,6 +494,7 @@
     if (needV5) { s.settings.layout = 'open'; s.settings.layoutV5 = true; for (const div of s.divisions) if (div.zone) VO.placeDirector(s, div); }
     // v7: atasan Finance Division duduk di sisi kanan ruangan (bisa diubah di Edit Divisi)
     // v8: tampilan default "Studio" (kantor 2 lantai); tata ulang sekali agar ada ruang tangga
+    s.settings.theme = 'studio'; // hanya ada satu tampilan (Studio)
     if (needV8) { s.settings.theme = 'studio'; s.settings.themeV8 = true; if (s.divisions.length || s.facilities.length) VO.autoLayout(s); }
     if (needV7) {
       s.settings.dirPosV7 = true;

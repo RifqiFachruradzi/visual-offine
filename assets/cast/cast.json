@@ -1,0 +1,98 @@
+{
+ "meta": {
+  "frameW": 144,
+  "frameH": 192,
+  "cols": [
+   "idle",
+   "walk:0",
+   "walk:1",
+   "walk:0",
+   "walk:-1",
+   "sit",
+   "type:1",
+   "type:-1",
+   "cheer"
+  ],
+  "rows": [
+   "front",
+   "back",
+   "side"
+  ],
+  "anchorX": 72,
+  "anchorY": 167.20772003072926,
+  "headY": 31.075314089629135,
+  "unitPx": 75.29411764705883
+ },
+ "chars": [
+  {
+   "id": "01",
+   "name": "01_navy_manager",
+   "height": 1.921
+  },
+  {
+   "id": "02",
+   "name": "02_blue_shirt",
+   "height": 1.937
+  },
+  {
+   "id": "03",
+   "name": "03_pink_cardigan",
+   "height": 1.88
+  },
+  {
+   "id": "04",
+   "name": "04_glasses_brown_suit",
+   "height": 1.921
+  },
+  {
+   "id": "05",
+   "name": "05_blonde_cardigan",
+   "height": 1.88
+  },
+  {
+   "id": "06",
+   "name": "06_charcoal_manager",
+   "height": 1.825
+  },
+  {
+   "id": "07",
+   "name": "07_navy_red_tie",
+   "height": 1.88
+  },
+  {
+   "id": "08",
+   "name": "08_green_tie",
+   "height": 1.921
+  },
+  {
+   "id": "09",
+   "name": "09_magenta_cardigan",
+   "height": 1.89
+  },
+  {
+   "id": "10",
+   "name": "10_pale_blue_shirt",
+   "height": 1.937
+  },
+  {
+   "id": "11",
+   "name": "11_senior_suit",
+   "height": 1.825
+  },
+  {
+   "id": "12",
+   "name": "12_black_suit",
+   "height": 1.88
+  },
+  {
+   "id": "13",
+   "name": "13_red_tie_suit",
+   "height": 1.921
+  },
+  {
+   "id": "14",
+   "name": "14_mustache_shirt",
+   "height": 1.88
+  }
+ ]
+}

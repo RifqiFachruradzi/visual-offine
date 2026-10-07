@@ -1,0 +1,117 @@
+<!doctype html><html><body style="margin:0;background:#888">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const P = new URLSearchParams(location.search);
+const W = +(P.get('w') || 144), H = +(P.get('h') || 192), ELEV = +(P.get('elev') || 22) * Math.PI / 180;
+const VIEW_H = 2.55; // satuan dunia terlihat secara vertikal
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(P.get('bg') ? 0xd9cdb4 : 0x000000, P.get('bg') ? 1 : 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6f7890, 1.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.9); sun.position.set(-2, 4, 5); scene.add(sun);
+const VIEW_W = VIEW_H * W / H;
+const cam = new THREE.OrthographicCamera(-VIEW_W / 2, VIEW_W / 2, VIEW_H / 2, -VIEW_H / 2, 0.1, 100);
+const look = new THREE.Vector3(0, 1.02, 0);
+cam.position.set(0, look.y + Math.sin(ELEV) * 20, Math.cos(ELEV) * 20); cam.lookAt(look); cam.updateMatrixWorld();
+
+const gltf = await new GLTFLoader().loadAsync('./cast.glb');
+// kelompokkan mesh per karakter berdasarkan prefix "NN_"
+const chars = new Map();
+gltf.scene.traverse((o) => {
+  if (!o.isMesh) return;
+  const id = o.name.slice(0, 2);
+  if (!chars.has(id)) chars.set(id, { id, meshes: [], name: '' });
+  const c = chars.get(id);
+  c.meshes.push(o);
+  if (!c.name) c.name = o.name.replace(/_(left|right)_.*$/, '').replace(/_(waist|torso|head).*$/, '');
+  const col = o.material.color.clone();
+  if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
+  o.material = new THREE.MeshLambertMaterial({ color: col, flatShading: true });
+});
+const kind = (n) => {
+  if (/left_(trouser|leg|shoe)/.test(n)) return 'legL';
+  if (/right_(trouser|leg|shoe)/.test(n)) return 'legR';
+  if (/left_(shoulder|sleeve|cuff|hand|thumb)/.test(n)) return 'armL';
+  if (/right_(shoulder|sleeve|cuff|hand|thumb)/.test(n)) return 'armR';
+  return 'body';
+};
+const built = [];
+for (const c of [...chars.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+  const box = new THREE.Box3(); c.meshes.forEach((m) => box.expandByObject(m));
+  const cx = (box.min.x + box.max.x) / 2;
+  const root = new THREE.Group(); // berdiri di (0,0,0), menghadap +Z
+  const inner = new THREE.Group(); root.add(inner);
+  const groups = {};
+  const bb = {};
+  for (const m of c.meshes) {
+    const k = kind(m.name);
+    (bb[k] = bb[k] || new THREE.Box3()).expandByObject(m);
+  }
+  for (const k of Object.keys(bb)) {
+    const b = bb[k];
+    const piv = new THREE.Vector3((b.min.x + b.max.x) / 2 - cx, k.startsWith('leg') ? b.max.y : b.max.y - 0.06, (b.min.z + b.max.z) / 2);
+    if (k === 'body') piv.set(0, 0, 0);
+    const g = new THREE.Group(); g.position.copy(piv); inner.add(g); groups[k] = g;
+    g.userData.pivot = piv;
+  }
+  for (const m of c.meshes) {
+    const k = kind(m.name); const g = groups[k];
+    const mesh = m.clone();
+    mesh.position.x -= cx; mesh.position.sub(g.userData.pivot);
+    g.add(mesh);
+  }
+  root.visible = false; scene.add(root);
+  built.push({ id: c.id, name: c.name, root, inner, groups, hip: (bb.legL || bb.legR).max.y, height: box.max.y });
+}
+const R = (g, a) => { if (g) g.rotation.x = a; };
+function pose(ch, p) {
+  const { groups: G, inner } = ch;
+  inner.position.y = 0;
+  ['legL', 'legR', 'armL', 'armR'].forEach((k) => G[k] && G[k].rotation.set(0, 0, 0));
+  const deg = Math.PI / 180;
+  if (p.type === 'idle') { R(G.armL, 4 * deg); R(G.armR, 4 * deg); if (G.armL) G.armL.rotation.z = -5 * deg; if (G.armR) G.armR.rotation.z = 5 * deg; }
+  if (p.type === 'walk') {
+    const s = p.s; R(G.legL, -28 * deg * s); R(G.legR, 28 * deg * s); R(G.armL, 24 * deg * s); R(G.armR, -24 * deg * s);
+    inner.position.y = Math.abs(s) < 0.5 ? 0.035 : 0;
+  }
+  if (p.type === 'sit' || p.type === 'type') {
+    R(G.legL, -84 * deg); R(G.legR, -84 * deg);
+    inner.position.y = -(ch.hip - 0.5);
+    if (p.type === 'type') { R(G.armL, (-62 + p.s * 7) * deg); R(G.armR, (-62 - p.s * 7) * deg); }
+    else { R(G.armL, -24 * deg); R(G.armR, -24 * deg); }
+  }
+  if (p.type === 'cheer') { R(G.armL, 165 * deg); R(G.armR, 165 * deg); }
+}
+const FRAMES = [{ type: 'idle' }, { type: 'walk', s: 0 }, { type: 'walk', s: 1 }, { type: 'walk', s: 0 }, { type: 'walk', s: -1 }, { type: 'sit' }, { type: 'type', s: 1 }, { type: 'type', s: -1 }, { type: 'cheer' }];
+const DIRS = [0, Math.PI, Math.PI / 2]; // depan, belakang, samping (menghadap kanan layar)
+// titik kaki (0,0,0) di layar
+const o = new THREE.Vector3(0, 0, 0).project(cam);
+const anchor = { x: (o.x + 1) / 2 * W, y: (1 - o.y) / 2 * H };
+const top = new THREE.Vector3(0, 1.95, 0).project(cam);
+const sheets = {};
+const sheet = document.createElement('canvas');
+sheet.width = W * FRAMES.length; sheet.height = H * DIRS.length;
+const sx = sheet.getContext('2d');
+for (const ch of built) {
+  sx.clearRect(0, 0, sheet.width, sheet.height);
+  built.forEach((b) => (b.root.visible = b === ch));
+  DIRS.forEach((ry, r) => {
+    ch.root.rotation.y = ry;
+    FRAMES.forEach((f, c) => {
+      pose(ch, f);
+      renderer.render(scene, cam);
+      sx.drawImage(renderer.domElement, c * W, r * H);
+    });
+  });
+  sheets[ch.id] = sheet.toDataURL('image/png');
+}
+window.RESULT = {
+  meta: { frameW: W, frameH: H, cols: FRAMES.map((f) => f.type + (f.s != null ? ':' + f.s : '')), rows: ['front', 'back', 'side'], anchorX: anchor.x, anchorY: anchor.y, headY: (1 - top.y) / 2 * H, unitPx: H / VIEW_H },
+  chars: built.map((b) => ({ id: b.id, name: b.name, height: +b.height.toFixed(3) })),
+  sheets,
+};
+</script></body></html>
