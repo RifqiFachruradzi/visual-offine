@@ -1,0 +1,165 @@
+{
+  "format": "glTF 2.0 / GLB",
+  "units": "meters",
+  "up_axis": "+Y",
+  "front_axis": "+Z",
+  "embedded_PBR_materials": true,
+  "characters_included": false,
+  "rigged": false,
+  "animated": false,
+  "assets": {
+    "office_empty": {
+      "file": "office_empty.glb",
+      "description": "Struktur kantor split-level 28 x 24 meter; lantai, dinding, jendela, tangga dan railing saja.",
+      "bounds": [
+        [
+          -14.199999809265137,
+          -0.4300000071525574,
+          -12.199999809265137
+        ],
+        [
+          14.199999809265137,
+          5.360000133514404,
+          12.199999809265137
+        ]
+      ],
+      "meshes": 570,
+      "triangles": 6880,
+      "anchors": {
+        "lower_floor": [
+          0,
+          0,
+          0
+        ],
+        "upper_floor": [
+          0,
+          2.4,
+          -7.8
+        ],
+        "stairs_lower": [
+          12.7,
+          0,
+          1
+        ]
+      }
+    },
+    "boss_room": {
+      "file": "boss_room.glb",
+      "description": "Ruang boss dengan meja direktur, monitor, tiga kursi, dashboard, lemari dan tanaman.",
+      "bounds": [
+        [
+          -3.5999999046325684,
+          -0.3799999952316284,
+          -3.3499999046325684
+        ],
+        [
+          3.5999999046325684,
+          3.0,
+          3.3499999046325684
+        ]
+      ],
+      "meshes": 94,
+      "triangles": 1236,
+      "anchors": {
+        "entry": [
+          0,
+          0,
+          3.25
+        ],
+        "desk": [
+          0,
+          0.81,
+          -0.25
+        ],
+        "boss_seat": [
+          0,
+          0,
+          -1.5
+        ]
+      }
+    },
+    "billiard_room": {
+      "file": "billiard_room.glb",
+      "description": "Ruang biliar dengan satu meja enam lubang, 15 bola warna dan bola putih, stik, rak stik serta sofa.",
+      "bounds": [
+        [
+          -4.599999904632568,
+          -0.3799999952316284,
+          -3.5999999046325684
+        ],
+        [
+          4.599999904632568,
+          3.0,
+          3.5999999046325684
+        ]
+      ],
+      "meshes": 65,
+      "triangles": 2180,
+      "anchors": {
+        "entry": [
+          0,
+          0,
+          3.5
+        ],
+        "table": [
+          0,
+          0.95,
+          0
+        ]
+      }
+    },
+    "swimming_pool": {
+      "file": "swimming_pool.glb",
+      "description": "Kolam renang dengan dek, air statis, tangga, tiga kursi santai dan tanaman; tanpa simulasi air.",
+      "bounds": [
+        [
+          -6.099999904632568,
+          -1.7000000476837158,
+          -5.099999904632568
+        ],
+        [
+          6.099999904632568,
+          1.7350000143051147,
+          5.099999904632568
+        ]
+      ],
+      "meshes": 64,
+      "triangles": 768,
+      "anchors": {
+        "entry": [
+          0,
+          0,
+          5
+        ],
+        "water_surface": [
+          0,
+          -0.169,
+          0
+        ]
+      }
+    }
+  },
+  "suggested_external_placement": {
+    "office_empty": [
+      0,
+      0,
+      0
+    ],
+    "swimming_pool": [
+      21,
+      0,
+      0
+    ],
+    "billiard_room": [
+      20,
+      0,
+      11
+    ],
+    "boss_room": [
+      -9.9,
+      2.4,
+      -8
+    ]
+  },
+  "placement_note": "Contoh posisi; ruang boss sesuai platform belakang. Kolam dan biliar berada di luar tapak kantor kosong; perlu koridor tambahan sesuai aplikasi."
+}

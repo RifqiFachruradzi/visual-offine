@@ -45,12 +45,13 @@
   };
 
   VO.FACILITY_TYPES = {
-    boss: { label: 'Ruang Boss', w: 10, h: 8, color: '#5b4636' },
-    meeting: { label: 'Ruang Rapat', w: 12, h: 8, color: '#3d5a80' },
-    pantry: { label: 'Pantry', w: 9, h: 8, color: '#6a994e' },
-    lounge: { label: 'Lounge', w: 9, h: 8, color: '#9d4edd' },
-    pool: { label: 'Kolam Renang', w: 12, h: 9, color: '#1e88e5' },
-    billiard: { label: 'Ruang Biliar', w: 9, h: 8, color: '#2e7d32' },
+    // ukuran (tile = meter) mengikuti aset GLB: boss_room 7,2×6,7 · billiard_room 9×7 · swimming_pool 12×10
+    boss: { label: 'Ruang Boss', w: 7, h: 8, color: '#5b4636' },
+    meeting: { label: 'Ruang Rapat', w: 10, h: 7, color: '#3d5a80' },
+    pantry: { label: 'Pantry', w: 7, h: 6, color: '#6a994e' },
+    lounge: { label: 'Lounge', w: 8, h: 6, color: '#9d4edd' },
+    pool: { label: 'Kolam Renang', w: 12, h: 11, color: '#1e88e5' },
+    billiard: { label: 'Ruang Biliar', w: 9, h: 7, color: '#2e7d32' },
   };
 
   VO.FLOORS = {
@@ -123,7 +124,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layoutV9: true, layout: 'open', layoutV5: true, dirPosV7: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layoutV9: true, assetsV10: true, layout: 'open', layoutV5: true, dirPosV7: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -321,8 +322,8 @@
   VO.bossSeat = function (s) {
     const f = s.facilities.find((f) => f.type === 'boss');
     if (!f) return { desk: { x: 3, y: 3 }, chair: { x: 3, y: 2 }, room: null };
-    // meja Boss di sisi kanan ruangan (meja 3 tile: cx-1..cx+1)
-    const cx = f.x + f.w - 3;
+    // meja Boss di tengah ruangan (sesuai boss_room.glb; meja 3 tile: cx-1..cx+1)
+    const cx = f.x + Math.floor(f.w / 2);
     return { desk: { x: cx, y: f.y + 3 }, chair: { x: cx, y: f.y + 2 }, room: f };
   };
 
@@ -347,8 +348,8 @@
   };
 
   // Kolam renang: air di tengah-kiri, kursi berjemur di sisi kanan (dek kayu di sekelilingnya)
-  VO.poolWater = function (f) {
-    return { x: f.x + 2, y: f.y + 2, w: Math.max(2, f.w - 6), h: Math.max(2, f.h - 4) };
+  VO.poolWater = function (f) { // swimming_pool.glb: kolam 8×5 m di tengah dek 12×10 m
+    return { x: f.x + 2, y: f.y + 3, w: Math.max(2, f.w - 4), h: Math.max(2, f.h - 6) };
   };
   VO.poolLoungers = function (f) {
     const out = [];
@@ -358,24 +359,11 @@
 
   // Meja biliar 3×2 tile di tengah ruangan
   VO.billiardTable = function (f) {
-    return { x: f.x + Math.floor((f.w - 3) / 2), y: f.y + Math.floor((f.h - 2) / 2) + 1, w: 3, h: 2 };
+    return { x: f.x + Math.floor((f.w - 3) / 2), y: f.y + Math.floor((f.h - 2) / 2), w: 3, h: 2 };
   };
 
-  // Perabot tambahan Ruang Boss: sofa tamu + meja kopi (kiri), meja meeting kecil + kursi (kanan), tanaman
-  VO.bossExtras = function (f) {
-    if (f.w < 9 || f.h < 7) return [];
-    const L = f.x, T = f.y, R = f.x + f.w, B = f.y + f.h;
-    return [
-      { kind: 'sofa', x: L + 1, y: T + 2, len: 2 },
-      { kind: 'coffee', x: L + 2, y: T + 2, len: 2 },
-      { kind: 'mtable', x: L + 3, y: B - 3 },
-      { kind: 'tub', x: L + 2, y: B - 3 },
-      { kind: 'tub', x: L + 4, y: B - 3 },
-      { kind: 'tub', x: L + 3, y: B - 2 },
-      { kind: 'plant', x: L + 1, y: B - 2 },
-      { kind: 'plant', x: R - 2, y: B - 2 },
-    ];
-  };
+  // (Dulu: sofa tamu, meja meeting kecil, tanaman.) Perabot Ruang Boss kini berasal dari boss_room.glb.
+  VO.bossExtras = function () { return []; };
   // tile yang ditempati perabot tambahan (untuk grid jalan)
   VO.bossExtraTiles = function (f) {
     const out = [];
@@ -422,7 +410,7 @@
     const order = ['boss', 'meeting', 'pantry', 'lounge', 'pool', 'billiard'];
     const facs = [...s.facilities].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
     for (const f of facs) {
-      f.x = x; f.y = 2; x += f.w + 1;
+      f.x = x; f.y = 0; x += f.w + 1; // menempel dinding belakang lantai atas
     }
     let maxX = x;
     // lebar lantai mengikuti baris fasilitas (min 46) agar denah mendekati persegi; divisi berlebih turun ke baris berikutnya
@@ -497,6 +485,7 @@
     const needV7 = !(s.settings && s.settings.dirPosV7);
     const needV8 = !(s.settings && s.settings.themeV8);
     const needV9 = !(s.settings && s.settings.layoutV9);
+    const needV10 = !(s.settings && s.settings.assetsV10);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -518,6 +507,12 @@
     // v9: denah simetris (perspektif depan, baris divisi di tengah, resepsionis) → tata ulang sekali
     if (needV9) { s.settings.layoutV9 = true; if (!needV8 && (s.divisions.length || s.facilities.length)) VO.autoLayout(s); }
     if (needV8) { s.settings.theme = 'studio'; s.settings.themeV8 = true; if (s.divisions.length || s.facilities.length) VO.autoLayout(s); }
+    // v10: tampilan 3D dari aset GLB → ukuran fasilitas mengikuti model (1 tile = 1 m), tata ulang sekali
+    if (needV10) {
+      s.settings.assetsV10 = true;
+      for (const f of s.facilities) { const d = VO.FACILITY_TYPES[f.type]; if (d) { f.w = d.w; f.h = d.h; } }
+      if (s.divisions.length || s.facilities.length) VO.autoLayout(s);
+    }
     if (needV7) {
       s.settings.dirPosV7 = true;
       for (const div of s.divisions) if (div.zone && /financ|keuangan/i.test(div.name) && !div.dirPos) { div.dirPos = 'right'; VO.placeDirector(s, div); }

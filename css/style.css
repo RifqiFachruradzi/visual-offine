@@ -68,7 +68,9 @@ textarea { width: 100%; resize: vertical; }
 .card.grow { flex: 1; min-height: 220px; display: flex; flex-direction: column; }
 .card h3 { margin-bottom: 8px; }
 
-.stage { position: relative; overflow: hidden; min-width: 0; }
+.stage { position: relative; overflow: hidden; min-width: 0; isolation: isolate; }
+/* kanvas WebGL (scene3d.js) di bawah kanvas overlay #office */
+canvas.office3d { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; background: linear-gradient(#eef3f1, #d9e4e0); }
 canvas#office { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 canvas#office.dragging { cursor: grabbing; }
 canvas#office.edit { cursor: crosshair; }

@@ -65,7 +65,7 @@
 
   // Kamera 3D bebas (ortografis): yaw = putar mengelilingi gedung, pitch = sudut pandang dari atas.
   // 3D default = diagonal seperti office_ai_expanded_v2.glb (yaw 30°, pitch 35°); 2D = dari atas.
-  const U = 34, ZM = 84; // px per tile, tinggi lantai 2
+  const U = 34, ZM = 2.4 * U; // px per tile (1 tile = 1 m), tinggi lantai 2 (2,4 m)
   const VIEW = (R.view = { yaw: 30, pitch: 35 });
   let FLAT = false, OBL = true, MZ = null, ELEV_OFF = false, PROBE = null;
   let CYA = 1, SYA = 0, SP = 0.57, CP = 0.82;
@@ -2274,15 +2274,60 @@
     ctx.lineWidth = 1;
   }
 
+  /* ------------------------------------------------------------ frame 3D (WebGL + overlay 2D) */
+  const S3 = () => VO.scene3d;
+  let canvasDirty = true;
+  function draw3d(canvas, ctx, s, ui, now, dpr) {
+    const s3 = S3();
+    if (s3.dirty) s3.build(s);
+    s3.show(true);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const z = R.cam.zoom * dpr;
+    ctx.setTransform(z, 0, 0, z, -R.cam.x * z, -R.cam.y * z);
+    const people = [s.boss, ...s.agents].map((e) => [e, VO.sim.rt.get(e.id)]).filter(([, rt]) => rt);
+    const list = [];
+    for (const [e, rt] of people) {
+      const fx = rt.x / T, fy = rt.y / T;
+      const p = iso(fx, fy);
+      const moving = rt.cur && rt.cur.type === 'goto' && rt.path && rt.path.length > 0;
+      let hx = 0, hy = 1;
+      if (rt.sitting) hy = VO.facesFront(s, e) ? 1 : -1;
+      else if (rt.mdx != null && (rt.mdx || rt.mdy)) { hx = rt.mdx; hy = rt.mdy; }
+      const happy = rt.happyUntil && rt.happyUntil > now;
+      let pose = { type: 'idle' };
+      if (happy || rt.status === 'chat') pose = { type: 'cheer' };
+      else if (moving) pose = { type: 'walk', s: Math.sin(rt.phase * 11), ph: rt.phase * 11 };
+      else if (rt.sitting) pose = rt.working ? { type: 'type', s: Math.sin(now / 85) } : { type: 'sit' };
+      const sel = R.selected === e.id, hov = R.hover === e.id;
+      if (sel || hov) {
+        ctx.strokeStyle = sel ? '#ffd166' : 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, 17, 17 * SP, 0, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+      }
+      rt._screen = { x: p.x, y: p.y, head: p.y - (rt.sitting ? 1.5 : 1.95) * U * CP };
+      list.push({ id: e.id, cast: VO.castOf(e), boss: e.id === 'boss', x: fx * U, y: elevAt(fx, fy), z: fy * U, rot: Math.atan2(hx, hy), pose });
+    }
+    S3().render({ geo, CYA, SYA, SP, CP, cam: R.cam, w: canvas.clientWidth, h: canvas.clientHeight, dpr }, list);
+    if (ui.edit) drawEditOverlay(ctx, s, ui);
+    for (const [e, rt] of people) drawPersonOverlay(ctx, e, rt, now);
+  }
+
   /* ------------------------------------------------------------ frame */
   R.draw = function (canvas, s, ui) {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const now = performance.now();
-    if (R.staticDirty || !floorCanvas) {
+    if (R.staticDirty) { canvasDirty = true; if (S3()) S3().dirty = true; R.staticDirty = false; }
+    updateGeo(s);
+    // Tampilan 3D sungguhan (three.js + aset GLB) — kanvas ini hanya menggambar overlay di atasnya
+    const s3 = S3();
+    if (s3 && !FLAT && !s3.ready && !s3.loading && !s3.failed) s3.init(canvas);
+    if (s3 && !FLAT && s3.ready) return draw3d(canvas, ctx, s, ui, now, dpr);
+    if (s3) s3.show(false);
+    if (canvasDirty || !floorCanvas) {
       buildFloor(s);
       buildProps(s);
-      R.staticDirty = false; R.camDirty = false;
+      canvasDirty = false; R.camDirty = false;
     } else if (R.camDirty) { // kamera diputar: gambar ulang lantai & urutkan ulang objek (tanpa probe ulang)
       buildFloor(s);
       rekey();
