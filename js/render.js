@@ -69,7 +69,8 @@
   const VIEW = (R.view = { yaw: 30, pitch: 35 });
   let FLAT = false, OBL = true, MZ = null, ELEV_OFF = false, PROBE = null;
   let CYA = 1, SYA = 0, SP = 0.57, CP = 0.82;
-  R.viewOf = (st) => (st && st.view === '2d' ? { yaw: 0, pitch: 88 } : { yaw: st && st.camYaw != null ? st.camYaw : 30, pitch: st && st.camPitch != null ? st.camPitch : 35 });
+  // sudut kamera 3D tetap (diagonal); pengguna hanya bisa zoom & geser
+  R.viewOf = (st) => (st && st.view === '2d' ? { yaw: 0, pitch: 88 } : { yaw: 30, pitch: 35 });
   function updateGeo(s) {
     const v = R.viewOf(s.settings);
     VIEW.yaw = v.yaw; VIEW.pitch = Math.max(18, Math.min(89, v.pitch));

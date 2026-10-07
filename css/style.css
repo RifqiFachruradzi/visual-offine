@@ -324,5 +324,3 @@ body.studio button:focus-visible, body.studio input:focus-visible, body.studio s
   body.studio .roomtabs .rt, body.studio .zoomctl button { min-height: 44px; }
 }
 
-.zoomctl button.sm { height: 26px; font-size: 13px; }
-.zoomctl .zsep { height: 1px; background: var(--line); margin: 2px 4px; }

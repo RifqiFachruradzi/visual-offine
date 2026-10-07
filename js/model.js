@@ -124,7 +124,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layoutV9: true, assetsV10: true, layout: 'open', layoutV5: true, dirPosV7: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layoutV9: true, assetsV10: true, symV11: true, layout: 'open', layoutV5: true, dirPosV7: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -452,6 +452,12 @@
       if (shift > 0) for (const d of row) { VO.setZone(s, d, { ...d.zone, x: d.zone.x + shift }, true); }
     }
     s.map.h = Math.max(24, cy + rowH + 2, fy);
+    // baris fasilitas (lantai atas) di tengah agar kiri-kanan simetris; sisakan ruang tangga di kanan
+    if (facs.length) {
+      const L = Math.min(...facs.map((f) => f.x)), Rr = Math.max(...facs.map((f) => f.x + f.w));
+      const shift = Math.min(Math.floor((s.map.w - (Rr - L)) / 2) - L, s.map.w - 4 - Rr);
+      if (shift > 0) for (const f of facs) f.x += shift;
+    }
   };
 
   // Geser zona divisi (ikut memindahkan ruang departemen & meja direktur)
@@ -486,6 +492,7 @@
     const needV8 = !(s.settings && s.settings.themeV8);
     const needV9 = !(s.settings && s.settings.layoutV9);
     const needV10 = !(s.settings && s.settings.assetsV10);
+    const needV11 = !(s.settings && s.settings.symV11);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -512,6 +519,11 @@
       s.settings.assetsV10 = true;
       for (const f of s.facilities) { const d = VO.FACILITY_TYPES[f.type]; if (d) { f.w = d.w; f.h = d.h; } }
       if (s.divisions.length || s.facilities.length) VO.autoLayout(s);
+    }
+    // v11: kamera tetap + fasilitas lantai atas di tengah (simetris) → tata ulang sekali
+    if (needV11) {
+      s.settings.symV11 = true; delete s.settings.camYaw; delete s.settings.camPitch;
+      if (!needV10 && (s.divisions.length || s.facilities.length)) VO.autoLayout(s);
     }
     if (needV7) {
       s.settings.dirPosV7 = true;

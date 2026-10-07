@@ -332,9 +332,15 @@ S3.build = function (s) {
   rear.fit(E.rearWall, -0.1, wallY, -0.12, W + 0.1, wallY + (E.rearWall.max.y - E.rearWall.min.y), 0);
   const nWin = Math.max(1, Math.round(W / 5.6));
   for (let k = 0; k < nWin; k++) rear.add(E.rearWin, { x: (W * (k + 0.5)) / nWin, y: wallY - UP, z: 12 });
+  // dinding kiri & kanan simetris (dinding kanan = cermin dinding kiri, ikut jendela samping)
   left.fit(E.leftWall, -0.11, 0, M, 0.01, null, H);
+  b.fit(E.leftWall, W - 0.01, 0, M, W + 0.11, null, H);
   const lowD = H - M - 1, nSide = Math.max(1, Math.floor(lowD / 4.5));
-  for (let k = 0; k < nSide; k++) left.add(E.sideWin, { x: 14, z: M + 1 + (lowD * (k + 0.5)) / nSide });
+  for (let k = 0; k < nSide; k++) {
+    const z = M + 1 + (lowD * (k + 0.5)) / nSide;
+    left.add(E.sideWin, { x: 14, z });
+    b.add(E.sideWin, { x: W - 14, z, rot: Math.PI });
+  }
 
   // --- fasilitas
   for (const f of s.facilities) {
