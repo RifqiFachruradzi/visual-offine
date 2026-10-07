@@ -56,6 +56,12 @@
     <section class="stage">
       <canvas id="office"></canvas>
       <div class="zoomctl" role="group" aria-label="Zoom layout">
+        <button id="rotL" title="Putar kiri 45° (Q) — atau klik kanan + geser untuk memutar bebas" aria-label="Putar kiri">⟲</button>
+        <button id="rotR" title="Putar kanan 45° (R)" aria-label="Putar kanan">⟳</button>
+        <button id="tiltUp" class="sm" title="Lihat lebih dari atas" aria-label="Miringkan ke atas">▴</button>
+        <button id="tiltDown" class="sm" title="Lihat lebih rendah" aria-label="Miringkan ke bawah">▾</button>
+        <button id="camReset" class="sm" title="Kembalikan sudut kamera default" aria-label="Reset kamera">⌂</button>
+        <span class="zsep"></span>
         <button id="zoomIn" title="Perbesar (+)" aria-label="Perbesar">+</button>
         <button id="zoomPct" class="pct" title="Klik untuk lihat seluruh kantor" aria-label="Level zoom">100%</button>
         <button id="zoomOut" title="Perkecil (−)" aria-label="Perkecil">−</button>
@@ -114,7 +120,7 @@
           </div>
         </div>
       </div>
-      <div class="hint" id="hint">Scroll = zoom · Drag = geser kamera · Klik karyawan untuk detail</div>
+      <div class="hint" id="hint">Scroll = zoom · Drag = geser · Klik kanan + geser (atau Shift+drag) = putar kamera · Klik karyawan untuk detail</div>
     </section>
 
     <aside class="panel right">

@@ -63,58 +63,56 @@
   };
   const alpha = (hex, a) => { const [r, g, b] = hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; };
 
-  // Mode tampilan: '3d' = isometrik (default), '2d' = denah dari atas (sedikit perspektif 3/4)
-  const S2 = 40, ZF = 0.3; // ukuran tile 2D (px) & faktor tinggi benda di 2D
-  const flat = () => !!(VO.app && VO.app.state && VO.app.state.settings.view === '2d');
-  R.isFlat = flat;
-  let FLAT = false; // disalin dari setting tiap frame / rebuild (iso dipanggil sangat sering)
-  // Kamera depan simetris (tema Studio, 3D): perspektif satu titik — baris belakang sedikit menyempit ke
-  // tengah sehingga dinding kiri & kanan sama-sama terlihat (seperti office_ai_expanded_v2.glb)
-  const OS = 34, OB = 28, ZM = 84, PERS = 0.16; // lebar tile, kedalaman tile, tinggi lantai 2, kekuatan perspektif
-  let OBL = false, MZ = null, ELEV_OFF = false;
+  // Kamera 3D bebas (ortografis): yaw = putar mengelilingi gedung, pitch = sudut pandang dari atas.
+  // 3D default = diagonal seperti office_ai_expanded_v2.glb (yaw 30°, pitch 35°); 2D = dari atas.
+  const U = 34, ZM = 84; // px per tile, tinggi lantai 2
+  const VIEW = (R.view = { yaw: 30, pitch: 35 });
+  let FLAT = false, OBL = true, MZ = null, ELEV_OFF = false, PROBE = null;
+  let CYA = 1, SYA = 0, SP = 0.57, CP = 0.82;
+  R.viewOf = (st) => (st && st.view === '2d' ? { yaw: 0, pitch: 88 } : { yaw: st && st.camYaw != null ? st.camYaw : 30, pitch: st && st.camPitch != null ? st.camPitch : 35 });
   function updateGeo(s) {
-    FLAT = flat();
-    OBL = !FLAT && studio();
-    MZ = OBL ? VO.mezz(s) : null;
-    if (OBL) {
-      geo.MH = s.map.h; geo.CX = s.map.w / 2;
-      geo.OX = 50; geo.OY = ZM + 140;
-      geo.W = s.map.w * OS + 100;
-      geo.H = geo.OY + s.map.h * OB + 80;
-      return;
-    }
-    if (FLAT) {
-      geo.OX = 40; geo.OY = 90;
-      geo.W = s.map.w * S2 + 80;
-      geo.H = s.map.h * S2 + geo.OY + 60;
-      return;
-    }
-    geo.OX = s.map.h * HW + 40;
-    geo.OY = 90;
-    geo.W = (s.map.w + s.map.h) * HW + 80;
-    geo.H = (s.map.w + s.map.h) * HH + geo.OY + 60;
+    const v = R.viewOf(s.settings);
+    VIEW.yaw = v.yaw; VIEW.pitch = Math.max(18, Math.min(89, v.pitch));
+    FLAT = VIEW.pitch >= 70;
+    MZ = VO.mezz(s);
+    const a = (VIEW.yaw * Math.PI) / 180, b = (VIEW.pitch * Math.PI) / 180;
+    CYA = Math.cos(a); SYA = Math.sin(a); SP = Math.sin(b); CP = Math.cos(b);
+    geo.MH = s.map.h; geo.CXW = (s.map.w / 2) * U; geo.CYW = (s.map.h / 2) * U;
+    geo.OX = 0; geo.OY = 0;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [tx, ty] of [[-1, -1], [s.map.w + 1, -1], [-1, s.map.h + 1], [s.map.w + 1, s.map.h + 1]])
+      for (const z of [-30, 260]) { const p = proj(tx, ty, z); x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+    geo.OX = -x0 + 40; geo.OY = -y0 + 40;
+    geo.W = Math.ceil(x1 - x0 + 80); geo.H = Math.ceil(y1 - y0 + 80);
   }
+  const proj = (tx, ty, z) => {
+    const dx = tx * U - geo.CXW, dy = ty * U - geo.CYW;
+    return { x: geo.OX + dx * CYA - dy * SYA, y: geo.OY + (dx * SYA + dy * CYA) * SP - z * CP };
+  };
+  // kedalaman (semakin besar = semakin dekat kamera) untuk urutan gambar
+  const depthOf = (tx, ty) => (tx * U - geo.CXW) * SYA + (ty * U - geo.CYW) * CYA;
+  R.depthOf = depthOf;
+  R.updateGeo = (s) => updateGeo(s);
   // ketinggian lantai: mezanin (ty <= M) = ZM, tangga = landai, selain itu 0
   const elevAt = (tx, ty) => {
     if (!MZ || ELEV_OFF) return 0;
     if (tx > MZ.sx && tx < MZ.sx + 2 && ty > MZ.M && ty < MZ.M + 3) return (ZM * (MZ.M + 3 - ty)) / 3;
     return ty <= MZ.M ? ZM : 0;
   };
-  const persK = (ty) => 1 - PERS * (1 - Math.max(-1, Math.min(geo.MH + 2, ty)) / geo.MH);
-  const iso = (tx, ty, z = 0) => OBL
-    ? { x: geo.OX + (geo.CX + (tx - geo.CX) * persK(ty)) * OS, y: geo.OY + ty * OB - z - elevAt(tx, ty) }
-    : FLAT
-    ? { x: geo.OX + tx * S2, y: geo.OY + ty * S2 - z * ZF }
-    : { x: geo.OX + (tx - ty) * HW, y: geo.OY + (tx + ty) * HH - z };
+  const iso = (tx, ty, z = 0) => {
+    if (PROBE) PROBE.push(tx, ty);
+    return proj(tx, ty, z + elevAt(tx, ty));
+  };
+  // layar → tile (dicoba di lantai 2 dulu bila ada mezanin)
   const toTile = (ix, iy) => {
-    if (OBL) {
-      const tyE = (iy - geo.OY + ZM) / OB; // coba lantai 2 dulu
-      const ty = MZ && tyE <= MZ.M ? tyE : (iy - geo.OY) / OB;
-      return { x: geo.CX + ((ix - geo.OX) / OS - geo.CX) / persK(ty), y: ty };
+    const rx = ix - geo.OX;
+    for (const Z of MZ ? [ZM, 0] : [0]) {
+      const ry = (iy - geo.OY + Z * CP) / SP;
+      const dx = rx * CYA + ry * SYA, dy = -rx * SYA + ry * CYA;
+      const t = { x: (dx + geo.CXW) / U, y: (dy + geo.CYW) / U };
+      if (Z === ZM && t.y > MZ.M) continue;
+      return t;
     }
-    if (FLAT) return { x: (ix - geo.OX) / S2, y: (iy - geo.OY) / S2 };
-    const a = (ix - geo.OX) / HW, b = (iy - geo.OY) / HH;
-    return { x: (a + b) / 2, y: (b - a) / 2 };
   };
   R.iso = iso;
 
@@ -146,29 +144,26 @@
    */
   function box(ctx, x0, y0, x1, y1, z, h, c, opt = {}) {
     const top = c.top || shade(c.base || c, 1.12);
-    const left = c.left || shade(c.base || c, 0.86); // sisi +ty (kiri-bawah)
-    const right = c.right || shade(c.base || c, 0.7); // sisi +tx (kanan-bawah)
-    const fL = [iso(x0, y1, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x0, y1, z + h)];
-    let fR = [iso(x1, y0, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x1, y0, z + h)];
-    let showR = true;
-    if (OBL) { // perspektif simetris: tampilkan sisi samping yang menghadap kamera (kanan untuk benda di kiri, kiri untuk benda di kanan)
-      const fLeft = [iso(x0, y0, z), iso(x0, y1, z), iso(x0, y1, z + h), iso(x0, y0, z + h)];
-      if (fR[0].x > fR[1].x + 0.05) showR = true;
-      else if (fLeft[0].x < fLeft[1].x - 0.05) fR = fLeft;
-      else showR = false;
-    }
+    const left = c.left || shade(c.base || c, 0.86); // sisi y (depan/belakang)
+    const right = c.right || shade(c.base || c, 0.7); // sisi x (kiri/kanan)
+    // sisi vertikal yang menghadap kamera saja (kamera bisa diputar ke segala arah)
+    const fy = CYA >= 0 ? y1 : y0, fx = SYA >= 0 ? x1 : x0;
+    const showY = Math.abs(CYA) > 0.02, showX = Math.abs(SYA) > 0.02;
+    const fL = [iso(x0, fy, z), iso(x1, fy, z), iso(x1, fy, z + h), iso(x0, fy, z + h)];
+    const fR = [iso(fx, y0, z), iso(fx, y1, z), iso(fx, y1, z + h), iso(fx, y0, z + h)];
     const fT = [iso(x0, y0, z + h), iso(x1, y0, z + h), iso(x1, y1, z + h), iso(x0, y1, z + h)];
-    if (showR) poly(ctx, fR, right);
-    poly(ctx, fL, left);
+    if (showX) poly(ctx, fR, right);
+    if (showY) poly(ctx, fL, left);
     poly(ctx, fT, top);
     if (opt.outline !== false) {
       ctx.strokeStyle = 'rgba(0,0,0,0.18)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (const f of [fL, fR, fT]) { ctx.moveTo(f[0].x, f[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(f[i].x, f[i].y); ctx.closePath(); }
+      for (const f of [showY && fL, showX && fR, fT].filter(Boolean)) { ctx.moveTo(f[0].x, f[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(f[i].x, f[i].y); ctx.closePath(); }
       ctx.stroke();
     }
-    return { fL, fR, fT };
+    const dead = (f) => [f[0], f[0], f[0], f[0]]; // sisi tak terlihat: dekorasi di atasnya tidak digambar
+    return { fL: showY ? fL : dead(fL), fR: showX ? fR : dead(fR), fT };
   }
 
   // Titik di sisi depan-kiri (+ty) balok: u = 0..1 sepanjang x, v = 0..1 dari bawah ke atas
@@ -339,56 +334,62 @@
     const mz = VO.mezz(s);
     const M = mz ? mz.M : -1;
     // Cache the platform shadow with the floor, not in the animation loop.
+    ELEV_OFF = true;
     ctx.save(); ctx.shadowColor = 'rgba(29,59,49,0.22)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 16;
     poly(ctx, diamond(0, 0, mw, mh), '#d3ddd5'); ctx.restore();
-    // tepi platform
-    const A = iso(-0.35, mh), B = iso(mw + 0.35, mh);
-    poly(ctx, [A, B, { x: B.x, y: B.y + 22 }, { x: A.x, y: A.y + 22 }], '#6d7884'); // pelat fondasi tebal
-    poly(ctx, [A, B, { x: B.x, y: B.y + 5 }, { x: A.x, y: A.y + 5 }], '#a9b2bc');
+    ELEV_OFF = false;
+    // pelat fondasi tebal (sisi yang menghadap kamera ikut putaran)
+    ELEV_OFF = true;
+    box(ctx, -0.35, -0.35, mw + 0.35, mh + 0.35, -22, 22, { top: '#a9b2bc', left: '#6d7884', right: '#5d6873' }, { outline: false });
+    ELEV_OFF = false;
     const zoneOf = new Map();
     const setRect = (r, v) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) zoneOf.set(x + ',' + y, v); };
     for (const div of s.divisions) setRect(div.zone, 'z:' + div.color);
     for (const f of s.facilities) setRect(f, 'f:' + mix(f.color, '#ffffff', 0.82));
     for (const d of s.departments) setRect({ x: d.room.x, y: d.room.y + 1, w: d.room.w, h: d.room.h - 1 }, 'd:' + deptColor(s, d));
-    for (let y = 0; y < mh; y++)
-      for (let x = 0; x < mw; x++) {
-        const z = zoneOf.get(x + ',' + y);
-        const up = mz && y < M;
-        const y0 = mz && y === M ? M + 0.002 : y; // baris pertama lantai 1 dimulai tepat di bawah tepi mezanin
-        const pts = diamond(x, y0, 1, 1 - (y0 - y));
-        if (z && z.startsWith('d:')) { poly(ctx, pts, mix(z.slice(2), '#e9eee9', 0.77), 'rgba(32,62,54,0.025)'); continue; }
-        if (z && z.startsWith('f:')) { poly(ctx, pts, z.slice(2), 'rgba(0,0,0,0.05)'); continue; }
-        if (up) { poly(ctx, pts, (x + y) % 2 ? '#e9ece7' : '#e5e9e4', 'rgba(0,0,0,0.04)'); continue; }
-        // lantai kayu terang di lantai 1 (di dalam ruangan divisi diberi sedikit warna divisi)
-        // lantai ubin krem kotak-kotak (checker) seperti office_ai_expanded_v2
-        const tile = (x + y) % 2 ? '#e0cfae' : '#d8c5a0';
-        poly(ctx, pts, z && z.startsWith('z:') ? mix(tile, z.slice(2), 0.05) : tile, 'rgba(120,96,60,0.06)');
+    const tileAt = (x, y) => {
+      const z = zoneOf.get(x + ',' + y);
+      const up = mz && y < M;
+      const y0 = mz && y === M ? M + 0.002 : y; // baris pertama lantai 1 dimulai tepat di bawah tepi mezanin
+      const pts = diamond(x, y0, 1, 1 - (y0 - y));
+      if (z && z.startsWith('d:')) return poly(ctx, pts, mix(z.slice(2), '#e9eee9', 0.77), 'rgba(32,62,54,0.025)');
+      if (z && z.startsWith('f:')) return poly(ctx, pts, z.slice(2), 'rgba(0,0,0,0.05)');
+      if (up) return poly(ctx, pts, (x + y) % 2 ? '#e9ece7' : '#e5e9e4', 'rgba(0,0,0,0.04)');
+      // lantai ubin krem kotak-kotak (checker) seperti office_ai_expanded_v2
+      const tile = (x + y) % 2 ? '#e0cfae' : '#d8c5a0';
+      poly(ctx, pts, z && z.startsWith('z:') ? mix(tile, z.slice(2), 0.05) : tile, 'rgba(120,96,60,0.06)');
+    };
+    // lantai 1 dulu, lalu blok mezanin, lalu lantai 2 (urutan benar dari arah kamera mana pun)
+    for (let y = mz ? M : 0; y < mh; y++) for (let x = 0; x < mw; x++) tileAt(x, y);
+    if (!mz) return;
+    ELEV_OFF = true;
+    box(ctx, 0, 0, mw, M + 0.002, 0, ZM, { top: '#e7eae6', left: '#f2f3f5', right: '#dfe3e8' }, { outline: false });
+    ELEV_OFF = false;
+    if (CYA > 0.05 && !FLAT) {
+      // dinding depan mezanin (dinding belakang lantai 1): jendela, pintu, rak buku
+      const top = (x) => iso(x, M, 0), bot = (x, z = 0) => iso(x, M + 0.002, z);
+      poly(ctx, [top(0), top(mw), bot(mw, ZM - 6), bot(0, ZM - 6)], '#d9dde3'); // tepi pelat lantai
+      const panel = (x0, x1, z0, z1, fill) => poly(ctx, [bot(x0, z0), bot(x1, z0), bot(x1, z1), bot(x0, z1)], fill);
+      for (let x = 3; x < mw - 3; x += 9) {
+        if (x + 3 > mz.sx - 1 && x < mz.sx + 3) continue;
+        const kind = Math.floor(x / 9) % 4;
+        if (kind === 1) { panel(x, x + 1.4, 0, 44, '#b9875a'); panel(x + 1.15, x + 1.25, 20, 24, '#f2d29b'); continue; } // pintu
+        if (kind === 3) { // rak buku
+          panel(x, x + 2.4, 0, 46, '#c49a6c');
+          for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) panel(x + 0.15 + i * 0.36, x + 0.42 + i * 0.36, 6 + r * 13, 16 + r * 13, ['#e57373', '#64b5f6', '#81c784', '#ffd54f', '#ba68c8', '#4db6ac'][(r + i) % 6]);
+          continue;
+        }
+        panel(x, x + 3, 18, 52, '#ffffff'); panel(x + 0.12, x + 2.88, 21, 49, '#a7d8ff'); panel(x + 1.45, x + 1.55, 21, 49, '#ffffff');
       }
-    if (!mz || FLAT) return;
-    // dinding depan mezanin (dinding belakang lantai 1): putih dengan jendela, pintu, rak buku
-    const top = (x) => iso(x, M, 0), bot = (x, z = 0) => iso(x, M + 0.002, z);
-    poly(ctx, [top(0), top(mw), bot(mw), bot(0)], '#f2f3f5');
-    poly(ctx, [top(0), top(mw), bot(mw, ZM - 6), bot(0, ZM - 6)], '#d9dde3'); // tepi pelat lantai
-    const panel = (x0, x1, z0, z1, fill) => poly(ctx, [bot(x0, z0), bot(x1, z0), bot(x1, z1), bot(x0, z1)], fill);
-    for (let x = 3; x < mw - 3; x += 9) {
-      if (x + 3 > mz.sx - 1 && x < mz.sx + 3) continue;
-      const kind = Math.floor(x / 9) % 4;
-      if (kind === 1) { panel(x, x + 1.4, 0, 44, '#b9875a'); panel(x + 1.15, x + 1.25, 20, 24, '#f2d29b'); continue; } // pintu
-      if (kind === 3) { // rak buku
-        panel(x, x + 2.4, 0, 46, '#c49a6c');
-        for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) panel(x + 0.15 + i * 0.36, x + 0.42 + i * 0.36, 6 + r * 13, 16 + r * 13, ['#e57373', '#64b5f6', '#81c784', '#ffd54f', '#ba68c8', '#4db6ac'][(r + i) % 6]);
-        continue;
-      }
-      panel(x, x + 3, 18, 52, '#ffffff'); panel(x + 0.12, x + 2.88, 21, 49, '#a7d8ff'); panel(x + 1.45, x + 1.55, 21, 49, '#ffffff');
     }
+    for (let y = 0; y < M; y++) for (let x = 0; x < mw; x++) tileAt(x, y);
   }
 
   // Tulisan yang "dicat" di lantai, mengikuti sumbu x isometrik (size = px per 32 unit tile)
   function floorText(ctx, text, tx, ty, size, color) {
     const o = iso(tx, ty);
     ctx.save();
-    if (FLAT) ctx.setTransform(S2 / 32, 0, 0, S2 / 32, o.x, o.y);
-    else ctx.setTransform(HW / 32, HH / 32, -HW / 32, HH / 32, o.x, o.y);
+    ctx.setTransform(HW / 32, HH / 32, -HW / 32, HH / 32, o.x, o.y);
     ctx.font = `800 ${size}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = color;
     ctx.fillText(text, 0, 0);
@@ -399,7 +400,8 @@
   // Setiap prop: { k: kedalaman (tx+ty pusat), d: fungsi gambar(ctx, now, s) }
   function buildProps(s) {
     props = [];
-    const add = (k, d) => props.push({ k, d });
+    // posisi tiap objek dicari otomatis (probe: rekam koordinat tile yang dipakai saat menggambar)
+    const add = (k, d) => props.push({ fixed: k <= -500 ? k : null, d });
 
     const walls = (r, color, fac) => {
       if (robot()) return; // tema robot: pulau terbuka tanpa dinding
@@ -633,6 +635,21 @@
       add(dd.x + dd.y + 2.3, (ctx) => drawChairBack(ctx, dd.x, dd.y + 1));
     }
     for (const fu of s.furniture) add(fu.x + fu.y + 1, (ctx) => drawFurniture(ctx, fu));
+    const pc = document.createElement('canvas').getContext('2d');
+    for (const p of props) {
+      if (p.fixed != null) continue;
+      PROBE = [];
+      try { p.d(pc, 0, s); } catch (e) {}
+      let ax = 0, ay = 0, n = PROBE.length / 2;
+      for (let i = 0; i < PROBE.length; i += 2) { ax += PROBE[i]; ay += PROBE[i + 1]; }
+      p.ax = n ? ax / n : 0; p.ay = n ? ay / n : 0;
+      PROBE = null;
+    }
+    rekey();
+  }
+  // urutkan ulang objek sesuai arah kamera (dipanggil saat kamera diputar)
+  function rekey() {
+    for (const p of props) p.k = p.fixed != null ? -1e9 + p.fixed : depthOf(p.ax, p.ay);
     props.sort((a, b) => a.k - b.k);
   }
 
@@ -646,6 +663,9 @@
       const x0 = side < 0 ? -0.35 : mw, x1 = side < 0 ? 0 : mw + 0.35;
       add(-1000 + (side > 0 ? 0.5 : 0), (ctx) => {
         const W = { top: '#c9ced6', left: '#eceef1', right: '#f3f4f6' };
+        // dinding penuh hanya bila sisi dalamnya menghadap kamera (gaya rumah boneka); selain itu cukup plint rendah
+        const inside = side < 0 ? SYA > 0.05 : SYA < -0.05;
+        if (!inside) { box(ctx, x0, 0, x1, mh, 0, 8, W, { outline: false }); return; }
         const g = box(ctx, x0, mz ? M + 0.002 : 0, x1, mh, 0, mz ? ZM : 64, W, { outline: false });
         facePanel(ctx, g.fR, 0, 1, 0, 0.07, '#d6dae0'); // plint
         const n = Math.max(1, Math.floor((mh - M) / 6));
@@ -674,9 +694,15 @@
       for (const pl of rc.plants) add(pl.x + pl.y + 1, (ctx) => drawFurniture(ctx, { type: 'plant', x: pl.x, y: pl.y }));
     }
     if (!mz) return;
-    add(-999, (ctx) => { // dinding belakang lantai 2
+    add(-999, (ctx) => { // dinding belakang lantai 2 (hanya bila dilihat dari depan)
+      if (CYA < 0.05) { box(ctx, 0, -0.35, mw, 0, 0, 8, { top: '#d5d9df', left: '#f4f5f7', right: '#e3e6eb' }, { outline: false }); return; }
       const g = box(ctx, 0, -0.35, mw, 0, 0, 64, { top: '#d5d9df', left: '#f4f5f7', right: '#e3e6eb' }, { outline: false });
       for (let x = 4; x < mw - 3; x += 7) { facePanel(ctx, g.fL, x / mw, (x + 3) / mw, 0.21, 0.9, '#667f79'); studioWindow(ctx, g.fL, (x + 0.1) / mw, (x + 2.9) / mw, 0.25, 0.86, x); }
+    });
+    add(-998, (ctx) => { // dinding depan hanya saat kamera di belakang gedung
+      if (CYA > -0.05) return;
+      const g = box(ctx, 0, mh, mw, mh + 0.35, 0, 64, { top: '#c9ced6', left: '#eceef1', right: '#f3f4f6' }, { outline: false });
+      for (let x = 3; x < mw - 3; x += 7) { facePanel(ctx, g.fL, x / mw, (x + 3) / mw, 0.3, 0.84, '#ffffff'); studioWindow(ctx, g.fL, (x + 0.1) / mw, (x + 2.9) / mw, 0.34, 0.8, x); }
     });
     // pagar kaca tepi mezanin (kecuali di mulut tangga)
     for (let x = 0; x < mw; x++) {
@@ -1901,15 +1927,16 @@
     const fx = rt.x / T, fy = rt.y / T;
     const p = iso(fx, fy);
     const moving = rt.cur && rt.cur.type === 'goto' && rt.path && rt.path.length > 0;
-    let back = false, mirror = false;
-    if (rt.sitting) {
-      if (VO.facesFront(s, ent)) { back = false; mirror = true; } // boss & direktur open plan menghadap ke depan (+ty)
-      else { back = true; mirror = false; } // karyawan menghadap meja (-ty)
-    } else if (rt.mdx != null) {
-      const sx = OBL || FLAT ? rt.mdx : rt.mdx - rt.mdy, sy = OBL || FLAT ? rt.mdy : rt.mdx + rt.mdy; // arah di layar
-      back = sy < -0.1;
+    let back = false, mirror = false, side = false;
+    // arah hadap di dunia → arah di layar (ikut putaran kamera)
+    let hx = null, hy = null;
+    if (rt.sitting) { hx = 0; hy = VO.facesFront(s, ent) ? 1 : -1; } // boss/direktur menghadap +y, karyawan menghadap meja (-y)
+    else if (rt.mdx != null) { hx = rt.mdx; hy = rt.mdy; }
+    if (hx != null) {
+      const sx = hx * CYA - hy * SYA, sy = hx * SYA + hy * CYA;
+      side = Math.abs(sx) > Math.abs(sy) * 1.3;
+      back = !side && sy < 0;
       mirror = sx < -0.1;
-      var side = Math.abs(sx) > Math.abs(sy) * 1.3; // berjalan menyamping → sprite samping
     }
     const sel = R.selected === ent.id, hov = R.hover === ent.id;
     if (sel || hov) {
@@ -1925,7 +1952,7 @@
     const happy = rt.happyUntil && rt.happyUntil > now ? 1 - (rt.happyUntil - now) / 1400 : 0;
     const talking = !!(rt.bubble && rt.bubble.until > now && now - (rt.bubble.until - 3000) < 1600);
     const opts = { back, mirror, moving, phase: rt.phase, sitting: rt.sitting, working: rt.working, now, seed: ent.id, happy, talking, cheer: rt.status === 'chat' };
-    opts.side = !rt.sitting && !!side; opts.seedN = (ent.id || '').length;
+    opts.side = side; opts.seedN = (ent.id || '').length;
     const headTop = castOn ? drawCast(ctx, look, opts) : robot() ? drawRobot(ctx, look, opts) : studio() ? drawStudioAvatar(ctx, look, opts) : drawAvatar(ctx, look, opts);
     if (ent.id === 'boss') { // mahkota
       ctx.fillStyle = '#ffca28';
@@ -2255,7 +2282,11 @@
     if (R.staticDirty || !floorCanvas) {
       buildFloor(s);
       buildProps(s);
-      R.staticDirty = false;
+      R.staticDirty = false; R.camDirty = false;
+    } else if (R.camDirty) { // kamera diputar: gambar ulang lantai & urutkan ulang objek (tanpa probe ulang)
+      buildFloor(s);
+      rekey();
+      R.camDirty = false;
     }
     updateGeo(s);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2292,7 +2323,7 @@
     // gabungkan props + karakter, urutkan dari belakang ke depan
     const people = [s.boss, ...s.agents].map((e) => [e, VO.sim.rt.get(e.id)]).filter(([, rt]) => rt);
     const items = props.slice();
-    for (const [e, rt] of people) items.push({ k: rt.x / T + rt.y / T + 0.05, d: (c) => drawPerson(c, s, e, rt, now) });
+    for (const [e, rt] of people) items.push({ k: depthOf(rt.x / T, rt.y / T) + 0.5, d: (c) => drawPerson(c, s, e, rt, now) });
     items.sort((a, b) => a.k - b.k);
     for (const it of items) it.d(ctx, now, s);
 
@@ -2346,7 +2377,7 @@
   R.fit = function (canvas, s) {
     updateGeo(s);
     const rects = [...s.facilities, ...s.departments.map((d) => d.room), ...s.divisions.map((d) => d.zone), ...s.furniture.map((f) => ({ x: f.x, y: f.y, w: 1, h: 1 }))];
-    if (!rects.length) rects.push({ x: 0, y: 0, w: s.map.w, h: s.map.h });
+    if (!rects.length || (s.settings && s.settings.theme === 'studio')) rects.push({ x: 0, y: 0, w: s.map.w, h: s.map.h }); // studio: seluruh gedung terlihat
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const r of rects) {
       for (const p of [iso(r.x - 1, r.y - 1, 60), iso(r.x + r.w + 1, r.y - 1, 60), iso(r.x + r.w + 1, r.y + r.h + 1), iso(r.x - 1, r.y + r.h + 1)]) {

@@ -261,6 +261,38 @@
     VO.ui.toast(v === '2d' ? 'Tampilan 2D (denah dari atas)' : 'Tampilan 3D (isometrik)', v === '2d' ? 'layout' : 'layers');
   };
 
+  // Kamera bebas: yaw (putar) & pitch (kemiringan). Titik tengah layar tetap di tempat saat diputar.
+  app.setCamera = function (yaw, pitch) {
+    const st = app.state.settings;
+    const c = $('office');
+    if (st.view === '2d') { st.view = '3d'; applyView(); }
+    const mid = R.screenToWorld(c.clientWidth / 2, c.clientHeight / 2);
+    st.camYaw = ((Math.round(yaw * 10) / 10) % 360 + 360) % 360;
+    st.camPitch = VO.clamp(Math.round(pitch * 10) / 10, 18, 89);
+    R.updateGeo(app.state);
+    R.camDirty = true;
+    R.focus(c, mid.x, mid.y);
+    // R.focus mengangkat titik 20px; kompensasi agar tidak "melompat"
+    app._saveDirty = true;
+  };
+  let camAnim = null;
+  app.rotateBy = function (dYaw, dPitch = 0) {
+    const from = { yaw: R.view.yaw, pitch: R.view.pitch }, start = performance.now();
+    if (camAnim) cancelAnimationFrame(camAnim);
+    const step = (now) => {
+      const k = Math.min(1, (now - start) / 260), e = 1 - (1 - k) * (1 - k);
+      app.setCamera(from.yaw + dYaw * e, from.pitch + dPitch * e);
+      camAnim = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    camAnim = requestAnimationFrame(step);
+  };
+  app.resetCamera = function () {
+    const st = app.state.settings;
+    st.view = '3d'; delete st.camYaw; delete st.camPitch;
+    applyView(); R.staticDirty = true; R.updateGeo(app.state);
+    R.fit($('office'), app.state); app._saveDirty = true;
+  };
+
   // Tombol + / − : zoom di titik tengah layar, dengan animasi halus
   let zoomAnim = null;
   app.zoomBy = function (f) {
@@ -306,7 +338,7 @@
     $('office').classList.toggle('edit', edit);
     $('hint').textContent = edit
       ? 'Drag ruangan/zona untuk memindah · drag kotak kecil di pojok kanan-bawah untuk ubah ukuran · klik kanan = hapus furnitur'
-      : 'Scroll = zoom · Drag = geser kamera · Klik karyawan untuk detail · Klik 2× untuk edit';
+      : 'Scroll = zoom · Drag = geser · Klik kanan + geser (atau Shift+drag) = putar kamera · Klik karyawan untuk detail · Klik 2× untuk edit';
   }
 
   function bindTop() {
@@ -324,6 +356,11 @@
     $('rpm').onchange = (e) => { s().settings.rpm = parseInt(e.target.value, 10); app.changed(); };
     $('speed').onchange = (e) => { s().settings.speed = parseFloat(e.target.value); app.changed(); };
     $('btnFit').onclick = () => R.fit($('office'), s());
+    $('rotL').onclick = () => app.rotateBy(-45);
+    $('rotR').onclick = () => app.rotateBy(45);
+    $('tiltUp').onclick = () => app.rotateBy(0, 12);
+    $('tiltDown').onclick = () => app.rotateBy(0, -12);
+    $('camReset').onclick = () => app.resetCamera();
     $('zoomIn').onclick = () => app.zoomBy(1.25);
     $('zoomOut').onclick = () => app.zoomBy(1 / 1.25);
     $('zoomFit').onclick = () => R.fit($('office'), s());
@@ -372,6 +409,8 @@
       if (e.key === 'e' || e.key === 'E') setMode(!app.ui.edit);
       if (e.key === 'v' || e.key === 'V') setMode(false);
       if (e.key === 'f' || e.key === 'F') R.fit($('office'), app.state);
+      if (e.key === 'q' || e.key === 'Q') app.rotateBy(-45);
+      if (e.key === 'r' || e.key === 'R') app.rotateBy(45);
       if (e.key === '+' || e.key === '=') app.zoomBy(1.25);
       if (e.key === '-' || e.key === '_') app.zoomBy(1 / 1.25);
       if (e.key === '2') app.setView('2d');
@@ -519,6 +558,8 @@
       const tile = { x: Math.floor(w.x / T), y: Math.floor(w.y / T) };
       const pan = { type: 'pan', sx, sy, cx: R.cam.x, cy: R.cam.y, moved: false };
 
+      // klik kanan / tombol tengah / Shift+drag = putar & miringkan kamera
+      if (e.button === 2 || e.button === 1 || (e.shiftKey && e.button === 0)) { drag = { type: 'orbit', sx, sy, yaw: R.view.yaw, pitch: R.view.pitch }; return; }
       if (e.button !== 0) { drag = pan; return; }
       if (!app.ui.edit) { drag = { ...pan, click: w }; return; }
 
@@ -543,6 +584,11 @@
         R.hover = p ? p.id : null;
         R.hoverObj = app.ui.edit ? hitTest(s, w.x, w.y)?.obj : null;
         canvas.style.cursor = app.ui.edit ? '' : p ? 'pointer' : '';
+        return;
+      }
+      if (drag.type === 'orbit') {
+        canvas.classList.add('dragging');
+        app.setCamera(drag.yaw + (sx - drag.sx) * 0.4, drag.pitch + (sy - drag.sy) * 0.25);
         return;
       }
       if (drag.type === 'pan') {
