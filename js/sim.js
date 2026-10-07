@@ -45,6 +45,8 @@
     const open = VO.openPlan(s);
     const mz = VO.mezz(s);
     if (open) for (const div of s.divisions) walls(div.zone, ZONE); // satu ruangan per divisi (berdinding)
+    const fr = VO.studioFront && VO.studioFront(s);
+    if (fr) { for (let x = fr.desk.x; x < fr.desk.x + fr.desk.w; x++) set(x, fr.desk.y); for (const pl of fr.plants) set(pl.x, pl.y); }
     if (mz) { // tema Studio: tepi mezanin berpagar, hanya bisa turun lewat tangga
       for (let x = 0; x < w; x++) if (x < mz.sx || x > mz.sx + 1) set(x, mz.M);
       set(mz.sx - 1, mz.M + 1); set(mz.sx + 2, mz.M + 1); // pegangan tangga; keluar tangga lewat baris M+2

@@ -68,17 +68,18 @@
   const flat = () => !!(VO.app && VO.app.state && VO.app.state.settings.view === '2d');
   R.isFlat = flat;
   let FLAT = false; // disalin dari setting tiap frame / rebuild (iso dipanggil sangat sering)
-  // Kamera depan miring (tema Studio, 3D): x ke kanan, kedalaman naik & sedikit ke kanan, z ke atas
-  const OS = 34, OB = 28, OA = 9, ZM = 84; // lebar tile, kedalaman tile, geser per baris, tinggi lantai 2
+  // Kamera depan simetris (tema Studio, 3D): perspektif satu titik — baris belakang sedikit menyempit ke
+  // tengah sehingga dinding kiri & kanan sama-sama terlihat (seperti office_ai_expanded_v2.glb)
+  const OS = 34, OB = 28, ZM = 84, PERS = 0.16; // lebar tile, kedalaman tile, tinggi lantai 2, kekuatan perspektif
   let OBL = false, MZ = null, ELEV_OFF = false;
   function updateGeo(s) {
     FLAT = flat();
     OBL = !FLAT && studio();
     MZ = OBL ? VO.mezz(s) : null;
     if (OBL) {
-      geo.MH = s.map.h;
-      geo.OX = 40; geo.OY = ZM + 140;
-      geo.W = s.map.w * OS + s.map.h * OA + 100;
+      geo.MH = s.map.h; geo.CX = s.map.w / 2;
+      geo.OX = 50; geo.OY = ZM + 140;
+      geo.W = s.map.w * OS + 100;
       geo.H = geo.OY + s.map.h * OB + 80;
       return;
     }
@@ -99,8 +100,9 @@
     if (tx > MZ.sx && tx < MZ.sx + 2 && ty > MZ.M && ty < MZ.M + 3) return (ZM * (MZ.M + 3 - ty)) / 3;
     return ty <= MZ.M ? ZM : 0;
   };
+  const persK = (ty) => 1 - PERS * (1 - Math.max(-1, Math.min(geo.MH + 2, ty)) / geo.MH);
   const iso = (tx, ty, z = 0) => OBL
-    ? { x: geo.OX + tx * OS + (geo.MH - ty) * OA, y: geo.OY + ty * OB - z - elevAt(tx, ty) }
+    ? { x: geo.OX + (geo.CX + (tx - geo.CX) * persK(ty)) * OS, y: geo.OY + ty * OB - z - elevAt(tx, ty) }
     : FLAT
     ? { x: geo.OX + tx * S2, y: geo.OY + ty * S2 - z * ZF }
     : { x: geo.OX + (tx - ty) * HW, y: geo.OY + (tx + ty) * HH - z };
@@ -108,7 +110,7 @@
     if (OBL) {
       const tyE = (iy - geo.OY + ZM) / OB; // coba lantai 2 dulu
       const ty = MZ && tyE <= MZ.M ? tyE : (iy - geo.OY) / OB;
-      return { x: (ix - geo.OX - (geo.MH - ty) * OA) / OS, y: ty };
+      return { x: geo.CX + ((ix - geo.OX) / OS - geo.CX) / persK(ty), y: ty };
     }
     if (FLAT) return { x: (ix - geo.OX) / S2, y: (iy - geo.OY) / S2 };
     const a = (ix - geo.OX) / HW, b = (iy - geo.OY) / HH;
@@ -147,10 +149,17 @@
     const left = c.left || shade(c.base || c, 0.86); // sisi +ty (kiri-bawah)
     const right = c.right || shade(c.base || c, 0.7); // sisi +tx (kanan-bawah)
     const fL = [iso(x0, y1, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x0, y1, z + h)];
-    const fR = [iso(x1, y0, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x1, y0, z + h)];
+    let fR = [iso(x1, y0, z), iso(x1, y1, z), iso(x1, y1, z + h), iso(x1, y0, z + h)];
+    let showR = true;
+    if (OBL) { // perspektif simetris: tampilkan sisi samping yang menghadap kamera (kanan untuk benda di kiri, kiri untuk benda di kanan)
+      const fLeft = [iso(x0, y0, z), iso(x0, y1, z), iso(x0, y1, z + h), iso(x0, y0, z + h)];
+      if (fR[0].x > fR[1].x + 0.05) showR = true;
+      else if (fLeft[0].x < fLeft[1].x - 0.05) fR = fLeft;
+      else showR = false;
+    }
     const fT = [iso(x0, y0, z + h), iso(x1, y0, z + h), iso(x1, y1, z + h), iso(x0, y1, z + h)];
+    if (showR) poly(ctx, fR, right);
     poly(ctx, fL, left);
-    poly(ctx, fR, right);
     poly(ctx, fT, top);
     if (opt.outline !== false) {
       ctx.strokeStyle = 'rgba(0,0,0,0.18)';
@@ -333,9 +342,9 @@
     ctx.save(); ctx.shadowColor = 'rgba(29,59,49,0.22)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 16;
     poly(ctx, diamond(0, 0, mw, mh), '#d3ddd5'); ctx.restore();
     // tepi platform
-    const A = iso(0, mh), B = iso(mw, mh), C = iso(mw, mz ? M + 0.002 : 0);
-    poly(ctx, [A, B, { x: B.x, y: B.y + 14 }, { x: A.x, y: A.y + 14 }], '#cfd3da');
-    poly(ctx, [B, C, { x: C.x, y: C.y + 14 }, { x: B.x, y: B.y + 14 }], '#bfc4cc');
+    const A = iso(-0.35, mh), B = iso(mw + 0.35, mh);
+    poly(ctx, [A, B, { x: B.x, y: B.y + 22 }, { x: A.x, y: A.y + 22 }], '#6d7884'); // pelat fondasi tebal
+    poly(ctx, [A, B, { x: B.x, y: B.y + 5 }, { x: A.x, y: A.y + 5 }], '#a9b2bc');
     const zoneOf = new Map();
     const setRect = (r, v) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) zoneOf.set(x + ',' + y, v); };
     for (const div of s.divisions) setRect(div.zone, 'z:' + div.color);
@@ -351,12 +360,9 @@
         if (z && z.startsWith('f:')) { poly(ctx, pts, z.slice(2), 'rgba(0,0,0,0.05)'); continue; }
         if (up) { poly(ctx, pts, (x + y) % 2 ? '#e9ece7' : '#e5e9e4', 'rgba(0,0,0,0.04)'); continue; }
         // lantai kayu terang di lantai 1 (di dalam ruangan divisi diberi sedikit warna divisi)
-        const wood = ['#dfcdb1', '#e1cfb4', '#ddcbae', '#e3d2b8'][(Math.floor(x / 4) + y) % 4];
-        poly(ctx, pts, z && z.startsWith('z:') ? mix(wood, z.slice(2), 0.04) : wood);
-        ctx.strokeStyle = 'rgba(110,86,55,0.07)'; ctx.beginPath();
-        for (let k = 1; k < 3; k++) { const a = iso(x, y + k / 3), b = iso(x + 1, y + k / 3); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
-        const u = x + hash(x, y); const j0 = iso(u, y0), j1 = iso(u, y + 1); ctx.moveTo(j0.x, j0.y); ctx.lineTo(j1.x, j1.y);
-        ctx.stroke();
+        // lantai ubin krem kotak-kotak (checker) seperti office_ai_expanded_v2
+        const tile = (x + y) % 2 ? '#e0cfae' : '#d8c5a0';
+        poly(ctx, pts, z && z.startsWith('z:') ? mix(tile, z.slice(2), 0.05) : tile, 'rgba(120,96,60,0.06)');
       }
     if (!mz || FLAT) return;
     // dinding depan mezanin (dinding belakang lantai 1): putih dengan jendela, pintu, rak buku
@@ -635,15 +641,38 @@
     const mw = s.map.w, mh = s.map.h;
     const mz = VO.mezz(s);
     const M = mz ? mz.M : 0;
-    add(-1000, (ctx) => { // dinding kiri lantai 1 (dan lantai 2)
-      const g = box(ctx, -0.35, mz ? M + 0.002 : 0, 0, mh, 0, mz ? ZM : 64, { top: '#d5d9df', left: '#eceef1', right: '#f4f5f7' }, { outline: false });
-      const n = Math.floor((mh - M) / 6);
-      for (let i = 0; i < n; i++) { const u0 = (i + 0.3) / n, u1 = (i + 0.75) / n; facePanel(ctx, g.fR, u0, u1, 0.3, 0.85, '#ffffff'); studioWindow(ctx, g.fR, u0 + 0.01, u1 - 0.01, 0.34, 0.81, i); }
-      if (mz) {
-        const u = box(ctx, -0.35, 0, 0, M, 0, 64, { top: '#d5d9df', left: '#eceef1', right: '#f4f5f7' }, { outline: false });
-        facePanel(ctx, u.fR, 0.3, 0.7, 0.35, 0.85, '#ffffff'); facePanel(ctx, u.fR, 0.32, 0.68, 0.39, 0.81, '#a7d8ff');
-      }
-    });
+    // dinding samping kiri & kanan simetris (lantai 1 + lantai 2), berjendela seperti office_ai_expanded_v2
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? -0.35 : mw, x1 = side < 0 ? 0 : mw + 0.35;
+      add(-1000 + (side > 0 ? 0.5 : 0), (ctx) => {
+        const W = { top: '#c9ced6', left: '#eceef1', right: '#f3f4f6' };
+        const g = box(ctx, x0, mz ? M + 0.002 : 0, x1, mh, 0, mz ? ZM : 64, W, { outline: false });
+        facePanel(ctx, g.fR, 0, 1, 0, 0.07, '#d6dae0'); // plint
+        const n = Math.max(1, Math.floor((mh - M) / 6));
+        for (let i = 0; i < n; i++) { const u0 = (i + 0.25) / n, u1 = (i + 0.75) / n; facePanel(ctx, g.fR, u0, u1, 0.3, 0.84, '#ffffff'); studioWindow(ctx, g.fR, u0 + 0.012, u1 - 0.012, 0.34, 0.8, i + (side > 0 ? 7 : 0)); }
+        if (mz) {
+          const u = box(ctx, x0, 0, x1, M, 0, 66, W, { outline: false });
+          facePanel(ctx, u.fR, 0.25, 0.75, 0.32, 0.84, '#ffffff'); studioWindow(ctx, u.fR, 0.265, 0.735, 0.36, 0.8, side > 0 ? 3 : 1);
+        }
+      });
+    }
+    // meja resepsionis "OFFICE AI" di depan-tengah + tanaman di sudut depan (seperti office_ai_expanded_v2)
+    const rc = VO.studioFront && VO.studioFront(s);
+    if (rc) {
+      add(rc.desk.x + rc.desk.y + 1.5, (ctx) => {
+        const d = rc.desk;
+        const b = box(ctx, d.x, d.y + 0.15, d.x + d.w, d.y + 0.85, 0, 26, { top: '#f4f1ea', left: '#3f9a8f', right: '#2f7f75' }, { outline: false });
+        for (let i = 0; i < 14; i++) facePanel(ctx, b.fL, 0.03 + i * 0.07, 0.06 + i * 0.07, 0.08, 0.72, 'rgba(255,255,255,0.18)'); // lamel
+        box(ctx, d.x - 0.05, d.y + 0.1, d.x + d.w + 0.05, d.y + 0.9, 26, 3, { top: '#ffffff', left: '#e3e6eb', right: '#d4d8de' }, { outline: false });
+        const lp = box(ctx, d.x + d.w / 2 - 0.3, d.y + 0.35, d.x + d.w / 2 + 0.3, d.y + 0.4, 29, 11, '#2b3140', { outline: false });
+        facePanel(ctx, lp.fL, 0.08, 0.92, 0.12, 0.88, '#7fd3ff');
+        const p = iso(d.x + d.w / 2, d.y + 0.85, 12);
+        ctx.save(); ctx.font = "bold 9px 'Courier New', ui-monospace, monospace"; try { ctx.letterSpacing = '2px'; } catch (e) {}
+        const tw = ctx.measureText('OFFICE AI').width;
+        ctx.fillStyle = '#ffffff'; ctx.fillText('OFFICE AI', p.x - tw / 2, p.y + 3); ctx.restore();
+      });
+      for (const pl of rc.plants) add(pl.x + pl.y + 1, (ctx) => drawFurniture(ctx, { type: 'plant', x: pl.x, y: pl.y }));
+    }
     if (!mz) return;
     add(-999, (ctx) => { // dinding belakang lantai 2
       const g = box(ctx, 0, -0.35, mw, 0, 0, 64, { top: '#d5d9df', left: '#f4f5f7', right: '#e3e6eb' }, { outline: false });

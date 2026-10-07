@@ -123,7 +123,7 @@
     const s = {
       version: 1,
       company: { name: 'Kantor AI Saya' },
-      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layout: 'open', layoutV5: true, dirPosV7: true },
+      settings: { floor: 'wood', ambient: true, aiMode: false, speed: 1, rpm: 10, modelsV2: true, theme: 'studio', themeV3: true, themeV4: true, themeV8: true, layoutV9: true, layout: 'open', layoutV5: true, dirPosV7: true },
       map: { w: 64, h: 44 },
       // Boss = kamu (pengguna yang login). Namanya mengikuti akun login.
       boss: VO.makeAgent({ id: 'boss', name: 'Boss', role: 'Boss (Kamu)', model: VO.DEFAULT_MODEL, style: 'suit', top: '#1f2430', tie: '#c62828', pants: '#1f2430', hair: '#1c1c1c', hairStyle: 1 }),
@@ -338,6 +338,14 @@
     return { M, sx, ups };
   };
 
+  // Perabot depan lantai 1 tema Studio: meja resepsionis di tengah baris terakhir + tanaman di dua sudut depan
+  VO.studioFront = function (s) {
+    if (!s || !s.settings || s.settings.theme !== 'studio' || !s.divisions.length) return null;
+    const mw = s.map.w, mh = s.map.h;
+    const w = 4, x = Math.round(mw / 2 - w / 2);
+    return { desk: { x, y: mh - 1, w }, plants: [{ x: 0, y: mh - 1 }, { x: mw - 1, y: mh - 1 }] };
+  };
+
   // Kolam renang: air di tengah-kiri, kursi berjemur di sisi kanan (dek kayu di sekelilingnya)
   VO.poolWater = function (f) {
     return { x: f.x + 2, y: f.y + 2, w: Math.max(2, f.w - 6), h: Math.max(2, f.h - 4) };
@@ -417,18 +425,21 @@
       f.x = x; f.y = 2; x += f.w + 1;
     }
     let maxX = x;
-    const maxW = Math.max(x, 70) - 2;
+    // lebar lantai mengikuti baris fasilitas (min 46) agar denah mendekati persegi; divisi berlebih turun ke baris berikutnya
+    const maxW = Math.max(x + 2, 46);
     // Divisi sebagai zona berisi ruang departemen
     // divisi mulai 4 baris di bawah fasilitas (ruang untuk koridor / tangga lantai mezanin)
     const facBottom = Math.max(0, ...s.facilities.map((f) => f.y + f.h));
     let cx = 2, cy = Math.max(12, facBottom + 4), rowH = 0;
+    const rows = [[]];
     for (const div of s.divisions) {
       const depts = s.departments.filter((d) => d.divisionId === div.id);
       const sizes = depts.map((d) => VO.roomSizeFor(Math.max(1, VO.deptAgents(s, d.id).length)));
       const innerW = sizes.reduce((acc, z) => acc + z.w, 0) + Math.max(0, sizes.length - 1);
       const zw = Math.max(12, innerW + 2);
       const zh = 5 + Math.max(4, ...sizes.map((z) => z.h));
-      if (cx + zw > maxW && cx > 2) { cx = 2; cy += rowH + 2; rowH = 0; }
+      if (cx + zw > maxW && cx > 2) { cx = 2; cy += rowH + 2; rowH = 0; rows.push([]); }
+      rows[rows.length - 1].push(div);
       VO.setZone(s, div, { x: cx, y: cy, w: zw, h: zh }, false);
       VO.placeDirector(s, div);
       let rx = cx + 1;
@@ -443,7 +454,15 @@
     // peta mengikuti isi (furnitur tetap dipertahankan di dalam peta)
     const fx = Math.max(0, ...s.furniture.map((f) => f.x + 2));
     const fy = Math.max(0, ...s.furniture.map((f) => f.y + 2));
-    s.map.w = Math.max(40, maxX + 1, fx);
+    const facRight = Math.max(0, ...s.facilities.map((f) => f.x + f.w));
+    s.map.w = Math.max(40, maxX, fx, facRight + 4); // margin kiri = kanan (2 tile) agar simetris; sisakan ruang tangga
+    // tiap baris divisi diletakkan di tengah lantai agar denah simetris kiri-kanan
+    for (const row of rows) {
+      if (!row.length) continue;
+      const right = Math.max(...row.map((d) => d.zone.x + d.zone.w));
+      const shift = Math.floor((s.map.w - right - 2) / 2);
+      if (shift > 0) for (const d of row) { VO.setZone(s, d, { ...d.zone, x: d.zone.x + shift }, true); }
+    }
     s.map.h = Math.max(24, cy + rowH + 2, fy);
   };
 
@@ -477,6 +496,7 @@
     const needV5 = !(s.settings && s.settings.layoutV5);
     const needV7 = !(s.settings && s.settings.dirPosV7);
     const needV8 = !(s.settings && s.settings.themeV8);
+    const needV9 = !(s.settings && s.settings.layoutV9);
     for (const k of ['facilities', 'divisions', 'departments', 'agents', 'furniture', 'tasks', 'docs', 'log']) if (!Array.isArray(s[k])) s[k] = [];
     s.settings = { ...d.settings, ...(s.settings || {}) };
     s.company = s.company || d.company;
@@ -495,6 +515,8 @@
     // v7: atasan Finance Division duduk di sisi kanan ruangan (bisa diubah di Edit Divisi)
     // v8: tampilan default "Studio" (kantor 2 lantai); tata ulang sekali agar ada ruang tangga
     s.settings.theme = 'studio'; // hanya ada satu tampilan (Studio)
+    // v9: denah simetris (perspektif depan, baris divisi di tengah, resepsionis) → tata ulang sekali
+    if (needV9) { s.settings.layoutV9 = true; if (!needV8 && (s.divisions.length || s.facilities.length)) VO.autoLayout(s); }
     if (needV8) { s.settings.theme = 'studio'; s.settings.themeV8 = true; if (s.divisions.length || s.facilities.length) VO.autoLayout(s); }
     if (needV7) {
       s.settings.dirPosV7 = true;
